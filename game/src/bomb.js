@@ -1,8 +1,5 @@
-// The Tide Charge: the objective device. It starts with the player, drops where its
-// carrier falls, can be picked up by a Gull, and once planted ticks down 35 seconds
-// to a detonation only a defuse can stop. Its blinking light and beeps speed up as
-// the timer runs out. A defuse kit halves the defuse channel (main.js passes the
-// kit in through the defuse time it uses; the charge itself only counts down).
+// GULLHAVEN Tide Charge: the bomb, reskinned as a harbour charge. Plant 3.5 s,
+// detonate in 35 s, defuse in 5 s — 2.5 s with the Defuse Kit.
 import * as THREE from 'three';
 import { PALETTE } from './palette.js';
 
@@ -28,8 +25,8 @@ export function createCharge(scene) {
   scene.add(group);
 
   const charge = {
-    state: 'idle', // idle | carried | dropped | planted
-    carrier: null, // 'player' | bot | null
+    state: 'idle',
+    carrier: null,
     site: null,
     pos: new THREE.Vector3(),
     detonateIn: DETONATE_SECONDS,

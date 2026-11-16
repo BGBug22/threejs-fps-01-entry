@@ -99,10 +99,28 @@ let bobY = 0;
 let prevFire = false;
 let prevKeys = new Set();
 let spectateTarget = null;
-const match = { gull: 0, keeper: 0, round: 1, money: START_MONEY, lossStreak: 0, attackTeam: 'gull', kills: 0, deaths: 0, earned: 0, roundKills: 0, totalKills: 0, lastIncome: '', botKills: {}, hasKit: false };
+const match = { gull: 0, keeper: 0, round: 1, money: START_MONEY, lossStreak: 0, attackTeam: 'gull', kills: 0, deaths: 0, earned: 0, roundKills: 0, totalKills: 0, lastIncome: '', botKills: {}, hasKit: false, roundHistory: [] };
 const owned = new Set(['puffin']);
 const ammoStore = {};
 const gunStats = { shots: 0, hits: 0, headshots: 0, damage: 0 };
+const CALLOUTS = [
+  { text: 'Rush A — follow me!', site: 'A', plan: 'RUSH A' },
+  { text: 'Hold B — stack the Cannery!', site: 'B', plan: 'HOLD B' },
+  { text: 'Need help at Mid!', site: null, plan: 'HELP MID' },
+];
+let calloutIdx = 0;
+let calloutUntil = 0;
+let calloutSite = null;
+let nextCryAt = 12;
+function sendCallout() {
+  const c = CALLOUTS[calloutIdx % CALLOUTS.length];
+  calloutIdx += 1;
+  calloutSite = c.site;
+  calloutUntil = time + 10;
+  hud.radio(`You: ${c.text}`, 'gull');
+  hud.setPlan(`PLAN: ${c.plan} — YOU: ${c.site ? `GO ${c.site}` : 'MID'}`);
+  sound('callout');
+}
 const seenKeeper = new Map();
 let mmTick = 0;
 
@@ -153,7 +171,11 @@ function sound(kind, arg) {
     case 'throw': audio.throw(); break;
     case 'smoke': audio.smoke(); break;
     case 'flare': audio.flare(); break;
+    case 'glare': audio.glare(); break;
     case 'gulls': audio.gulls(); break;
+    case 'cry': audio.cry(); break;
+    case 'step': audio.step(arg); break;
+    case 'callout': audio.callout(); break;
     default: break;
   }
 }
@@ -221,6 +243,16 @@ function damagePlayer(amount, fromPos, attackerName) {
   const died = player.damage(amount);
   hud.damageFlash();
   sound('hurt');
+  // A red arc at the screen edge points toward the shooter, so the player
+  // knows which way to turn before the next shot lands.
+  if (fromPos) {
+    const dx = fromPos.x - player.state.position.x;
+    const dz = fromPos.z - player.state.position.z;
+    const yaw = player.state.yaw;
+    const fwd = -dx * Math.sin(yaw) - dz * Math.cos(yaw);
+    const rgt = dx * Math.cos(yaw) - dz * Math.sin(yaw);
+    hud.damageFrom(Math.atan2(rgt, fwd));
+  }
   if (died) {
     match.deaths += 1;
     hud.killfeed(attackerName, 'You', false, 'keeper');
@@ -405,6 +437,7 @@ function checkRoundEnd() {
 function endRound(winner, reason) {
   if (phase !== 'live') return;
   phase = 'over';
+  match.roundHistory.push(winner === 'gull' ? 'G' : 'K');
   let reward = 0;
   if (winner === 'gull') {
     match.gull += 1;
@@ -441,6 +474,7 @@ function endRound(winner, reason) {
         result: match.gull > match.keeper ? 'GULLS WIN THE QUAY' : 'KEEPERS WIN THE QUAY',
         kills: match.kills, deaths: match.deaths, earned: match.earned, mvp,
         accuracy: acc, headshots: gunStats.headshots, damage: gunStats.damage,
+        history: match.roundHistory.join(''),
       });
       input.releaseLock();
     }, 3200);
@@ -509,6 +543,7 @@ function startMatch() {
   match.earned = 0;
   match.roundKills = 0;
   match.totalKills = 0;
+  match.roundHistory = [];
   match.lastIncome = '';
   match.botKills = {};
   match.hasKit = false;
@@ -529,6 +564,7 @@ const ctx = {
   get roundAge() { return time - roundStart; },
   get phase() { return phase; },
   get attackTeam() { return match.attackTeam; },
+  get callout() { return time < calloutUntil ? calloutSite : null; },
   get playerPos() { return player.state.position; },
   get playerAlive() { return player.state.alive; },
   charge: charge.state,
@@ -713,6 +749,13 @@ function fixedStep(dt) {
       player.step(dt, keys);
       bobPhase += player.groundSpeed() * dt * 1.7;
       bobY = Math.sin(bobPhase * 2) * 0.03 * Math.min(1, player.groundSpeed() / 5);
+      // Footsteps and the harbour: a thud each stride (quiet when walking),
+      // and a gull crying overhead every 9-17 seconds, so the quay sounds alive.
+      if (player.takeStep()) sound('step', !(keys.has('ShiftLeft') || keys.has('ShiftRight')));
+      if (time > nextCryAt) {
+        sound('cry');
+        nextCryAt = time + 9 + Math.random() * 8;
+      }
 
       const firing = input.state.firing;
       const semi = !weaponView.state.def.auto;
@@ -798,6 +841,7 @@ function fixedStep(dt) {
       audio.setMuted(!audio.muted);
       hud.banner(audio.muted ? 'SOUND OFF' : 'SOUND ON', '', 1200);
     }
+    if (pressed('KeyX') && phase === 'live' && player.state.alive) sendCallout();
 
     bots.step(dt, ctx);
     grenades.step(dt, ctx);
@@ -954,7 +998,7 @@ function setupShot() {
     match.botKills = { Pip: 9, Tern: 7 };
     hud.setScore(5, 3, 9);
     bots.spawnRound(9, seedBase + 916, 'keeper');
-    hud.showOverlay('end', '5 - 3', { result: 'GULLS WIN THE QUAY', kills: 12, deaths: 4, earned: 14200, mvp: 'You', accuracy: 41, headshots: 3, damage: 1480 });
+    hud.showOverlay('end', '5 - 3', { result: 'GULLS WIN THE QUAY', kills: 12, deaths: 4, earned: 14200, mvp: 'You', accuracy: 41, headshots: 3, damage: 1480, history: 'GGKGKGKG' });
     player.reset(new THREE.Vector3(-8, 0, -2), 0.5);
     phase = 'menu';
   }

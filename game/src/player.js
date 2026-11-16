@@ -1,7 +1,5 @@
-// Player movement and body: acceleration, friction, gravity, crouch and jump,
-// resolved as a box against the world's colliders one axis at a time, so a wall never
-// swallows the player. Health and armour live here too: armour absorbs half of every
-// hit until it is gone.
+// GULLHAVEN player: acceleration, friction, gravity, crouch and jump, resolved
+// as a box against the world's colliders one axis at a time. A stride is 2.2 m.
 import * as THREE from 'three';
 
 const RADIUS = 0.34;
@@ -33,6 +31,8 @@ export function createPlayer(colliders) {
   };
   const probe = new THREE.Box3();
   const wish = new THREE.Vector3();
+  let strideDist = 0;
+  let stepped = false;
 
   function overlaps(x, y, z, height, lift) {
     probe.min.set(x - RADIUS, y + lift, z - RADIUS);
@@ -113,6 +113,13 @@ export function createPlayer(colliders) {
       player.onGround = true;
     }
     player.velocity.y = Math.max(-30, player.velocity.y);
+    if (player.onGround) {
+      strideDist += Math.hypot(player.velocity.x, player.velocity.z) * dt;
+      if (strideDist >= 2.2) {
+        strideDist = 0;
+        stepped = true;
+      }
+    }
   }
 
   return {
@@ -122,6 +129,11 @@ export function createPlayer(colliders) {
     recoil,
     groundSpeed() {
       return Math.hypot(player.velocity.x, player.velocity.z);
+    },
+    takeStep() {
+      const s = stepped;
+      stepped = false;
+      return s;
     },
     damage(amount) {
       if (!player.alive) return false;

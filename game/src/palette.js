@@ -1,8 +1,4 @@
-// GULLHAVEN palette: a dusk harbour at low sun — orange-red sky over wet
-// cobbles, cream cannery walls, rust containers and a cold sea-blue accent
-// for the Gulls against the Keepers' lantern amber. The scene must read at a
-// glance in a small thumbnail: warm sky, dark quay, two team colours that
-// never blend. Every material and HUD colour comes from here.
+// GULLHAVEN palette: dusk orange-red sky, sea-blue Gulls, lantern-amber Keepers.
 export const PALETTE = {
   canvas: '#c65a2e',
   surface: '#8a6a4a',

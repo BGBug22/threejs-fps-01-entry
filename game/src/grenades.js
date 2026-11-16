@@ -1,13 +1,6 @@
-// Grenades: frag, smoke, flare, molotov and glare — five tools, one per key.
-// A thrown grenade is a small bouncing ball with a fuse: frag explodes with
-// radius damage, smoke blooms a cloud that blocks sight for 12 s, flare pops
-// bright orange and blinds anyone facing it for 3 s, molotov leaves a burning
-// pool that hurts anyone standing in it for 6 s, and glare is the fast white
-// flashbang: instant white-out for 1.5 s, no hanging light, for clearing a
-// corner before the push. The player throws with 4/5/6/7/8 and buys them in
-// the requisition menu; one Gull bot per round carries a smoke for the site
-// push, one Keeper carries a flare to blind the push, and one Keeper carries
-// a Molotov to deny it.
+// GULLHAVEN grenades: frag, smoke, flare, Molotov and glare — five tools with
+// five different jobs. A flare hangs and blinds whoever faces it; a glare
+// flashes white and rings ears for 1.5 s; bots throw smoke, flare and Molotov.
 import * as THREE from 'three';
 
 export const GRENADES = {
@@ -37,11 +30,8 @@ export function createGrenades(scene, colliders, fx) {
   };
   const probe = new THREE.Box3();
   const inventory = { frag: 0, smoke: 1, flare: 1, molotov: 0, glare: 0 };
-  // One bot smoke, one bot flare and one bot Molotov per round, never the player's stock.
   const botBudget = { smoke: 1, flare: 1, molotov: 1 };
   const active = [];
-  // Burning pools: { pos, life, thrower } — the thrower's name goes on the
-  // killfeed when the fire finishes someone off.
   const fires = [];
   let fireTick = 0;
 
@@ -89,17 +79,11 @@ export function createGrenades(scene, colliders, fx) {
       ctx.noise(pos, 'explosion', 20);
       fires.push({ pos, life: FIRE_LIFE, thrower: g.thrower });
     } else if (g.type === 'glare') {
-      // Glare: the fast flashbang. A white burst that whites out the room
-      // for a heartbeat — shorter than the flare's hanging burn, but instant,
-      // so it clears a corner the moment it pops. Same blind call, half the
-      // duration, and a sharp crack instead of the flare's hiss.
       fx.glareBurst(pos);
       ctx.sound('glare');
       ctx.noise(pos, 'glare', 18);
       ctx.blind(pos, 1.5);
     } else {
-      // Flare: a bright orange burst that hangs in the air and blinds whoever
-      // faces it — longer than a flashbang, and it lights the lane while it burns.
       fx.flareBurst(pos);
       ctx.sound('flare');
       ctx.noise(pos, 'flare', 14);
@@ -131,15 +115,11 @@ export function createGrenades(scene, colliders, fx) {
       inventory[type] += 1;
       return true;
     },
-    // Player throw: spends one from the inventory. Returns false when empty.
     throw(type, origin, dir) {
       if (inventory[type] <= 0) return false;
       inventory[type] -= 1;
       return launch(type, origin, dir);
     },
-    // Bot throw: spends the team's per-round budget for that type, never the
-    // player's stock. Returns false when the budget is spent or the type is
-    // not one bots carry.
     throwBot(type, origin, dir, thrower = 'Bot') {
       if (type !== 'smoke' && type !== 'molotov' && type !== 'flare') return false;
       if (botBudget[type] <= 0) return false;
@@ -177,8 +157,6 @@ export function createGrenades(scene, colliders, fx) {
           active.splice(i, 1);
         }
       }
-      // Burning pools tick: anyone standing in the fire takes FIRE_DPS until
-      // the pool burns out. The thrower gets the killfeed credit.
       if (fires.length) {
         fireTick += dt;
         if (fireTick >= FIRE_TICK) {

@@ -45,6 +45,13 @@
     background: radial-gradient(ellipse at center, transparent 55%, rgba(229, 72, 77, 0.55) 100%);
     transition: opacity 0.25s ease-out;
   }
+  /* damage direction: a red arc on a circle around the crosshair, rotated
+     toward the shooter (0 = ahead, +90 deg = hard right) */
+  #damage-dir {
+    position: absolute; left: 50%; top: 50%; width: 360px; height: 360px; margin: -180px 0 0 -180px;
+    border-radius: 50%; border: 6px solid transparent; border-top-color: rgba(229, 72, 77, 0.95);
+    z-index: 5; pointer-events: none;
+  }
   #scope {
     position: absolute; inset: 0; pointer-events: none; z-index: 4;
     background: radial-gradient(circle at center, transparent 34%, rgba(0,0,0,0.96) 36%);
@@ -243,6 +250,7 @@
   <div id="crosshair"><span class="dot"></span></div>
   <div id="hitmarker"></div>
   <div id="damage-flash"></div>
+  <div id="damage-dir" hidden></div>
   <div id="scope" hidden></div>
 
   <div id="topbar">
@@ -279,7 +287,7 @@
     <b>WASD</b> move &nbsp; <b>Mouse</b> aim &nbsp; <b>Shift</b> walk<br>
     <b>Space</b> jump &nbsp; <b>Ctrl</b> crouch &nbsp; <b>R</b> reload<br>
     <b>E</b> plant / defuse &nbsp; <b>B</b> buy &nbsp; <b>1–5</b> weapons &nbsp; <b>Tab</b> score<br>
-    <b>4</b> frag &nbsp; <b>5</b> smoke &nbsp; <b>6</b> flare &nbsp; <b>7</b> molotov &nbsp; <b>8</b> glare
+    <b>4</b> frag &nbsp; <b>5</b> smoke &nbsp; <b>6</b> flare &nbsp; <b>7</b> molotov &nbsp; <b>8</b> glare &nbsp; <b>X</b> callout
   </div>
 
   <div id="banner" hidden><div id="banner-title"></div><div id="banner-sub"></div></div>
@@ -319,7 +327,7 @@
     <button id="settings-btn" type="button">⚙ Settings</button>
     <div id="overlay-keys">
       <b>WASD</b> move &nbsp; <b>Mouse</b> aim &nbsp; <b>Left click</b> fire &nbsp; <b>R</b> reload<br>
-      <b>E</b> plant the Tide Charge &nbsp; <b>B</b> buy weapons &nbsp; <b>Tab</b> scoreboard &nbsp; <b>M</b> mute
+      <b>E</b> plant the Tide Charge &nbsp; <b>B</b> buy weapons &nbsp; <b>Tab</b> scoreboard &nbsp; <b>M</b> mute &nbsp; <b>X</b> callout
     </div>
   </div>
 </div>

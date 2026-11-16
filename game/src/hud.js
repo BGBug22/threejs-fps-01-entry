@@ -1,8 +1,6 @@
-// The DOM HUD: crosshair, hit marker, health, armour, ammo, money, round timer,
-// score, alive pips, kill feed, requisition menu, banners and the overlays. It never
-// touches the simulation; main.js pushes numbers in and reads callbacks out.
-// The requisition menu is five columns like the winners': Sidearms, Close Range,
-// Rifles, Gear, Grenades — each card with price, stats and Owned / Too expensive.
+// GULLHAVEN HUD: health, ammo, money, timer, score, minimap, radio log,
+// killfeed with weapon tags, five-column requisition menu, banners, the
+// settings panel and the end screen with accuracy, headshots and round history.
 export function createHud() {
   const $ = (id) => document.getElementById(id);
   const els = {
@@ -47,6 +45,7 @@ export function createHud() {
     plantFill: $('plant-fill'),
     plantLabel: $('plant-label'),
     damage: $('damage-flash'),
+    damageDir: $('damage-dir'),
     spectate: $('spectate'),
     bombStatus: $('bomb-status'),
     keys: $('keys'),
@@ -59,7 +58,6 @@ export function createHud() {
   let hitTimer = 0;
   let bannerTimer = 0;
   let last = { mag: -1, reserve: -1, hp: -1, armor: -1, money: -1, timer: '', score: '', grenades: '' };
-  // Minimap state: wall rects once, live dots every tick. The quay is 40.4 x 30.4 m.
   const mm = els.minimap ? els.minimap.getContext('2d') : null;
   let mmWalls = [];
 
@@ -77,7 +75,6 @@ export function createHud() {
     mm.fillRect(0, 0, W, H);
     mm.fillStyle = '#6b4a30';
     for (const r of mmWalls) mm.fillRect(X(r.x - r.w / 2), Z(r.z - r.d / 2), r.w * s, r.d * s);
-    // Site circles + letters.
     mm.font = 'bold 11px "Segoe UI", sans-serif';
     mm.textAlign = 'center';
     mm.textBaseline = 'middle';
@@ -92,12 +89,10 @@ export function createHud() {
       mm.fillStyle = color;
       mm.fillText(letter, X(cx), Z(cz));
     }
-    // Charge: blue square while carried/dropped, blinking when planted.
     if (data.bomb) {
       mm.fillStyle = data.bomb.planted ? '#ff2a1a' : '#7cc8f0';
       mm.fillRect(X(data.bomb.x) - 3, Z(data.bomb.z) - 3, 6, 6);
     }
-    // Last-seen Keeper dots, fading with age.
     if (data.keeper) {
       for (const a of data.keeper) {
         mm.globalAlpha = Math.max(0.25, 1 - a.age / 4);
@@ -108,7 +103,6 @@ export function createHud() {
       }
       mm.globalAlpha = 1;
     }
-    // Gull teammates.
     if (data.gull) {
       mm.fillStyle = '#2f9fd6';
       for (const e of data.gull) {
@@ -117,7 +111,6 @@ export function createHud() {
         mm.fill();
       }
     }
-    // The player: a white arrow that turns with the view.
     if (data.player) {
       const px = X(data.player.x);
       const pz = Z(data.player.z);
@@ -161,7 +154,6 @@ export function createHud() {
       last.grenades = text;
       els.grenades.textContent = text;
     },
-    // Radio log: the last 4 callouts, team-coloured, fading after 9 s.
     radio(text, team) {
       if (!els.radioLog) return;
       const row = document.createElement('div');
@@ -232,8 +224,6 @@ export function createHud() {
       v.className = victim === 'You' ? 'feed-gull' : 'feed-keeper';
       v.textContent = victim;
       row.append(k, document.createTextNode(headshot ? ' ☠ ' : ' ✕ '), v);
-      // The weapon tag names the gun that did it — a killfeed that only
-      // names people hides the loadout story the match is telling.
       if (weapon) {
         const w = document.createElement('span');
         w.className = 'feed-weapon';
@@ -242,8 +232,6 @@ export function createHud() {
       }
       els.killfeed.prepend(row);
       while (els.killfeed.children.length > 5) els.killfeed.lastChild.remove();
-      // 12 s, not 7: on a slow machine the staged cover's sim loop alone
-      // eats most of 7 s, and the kill would vanish before the capture.
       setTimeout(() => row.remove(), 12000);
     },
     hitMarker(killed, holdMs = 90) {
@@ -262,6 +250,13 @@ export function createHud() {
       els.damage.style.opacity = '0.55';
       setTimeout(() => { els.damage.style.opacity = '0'; }, 140);
     },
+    damageFrom(angle) {
+      if (!els.damageDir) return;
+      els.damageDir.style.transform = `rotate(${angle}rad)`;
+      show(els.damageDir);
+      clearTimeout(this._dirTimer);
+      this._dirTimer = setTimeout(() => hide(els.damageDir), 900);
+    },
     banner(title, sub, ms = 2600) {
       els.bannerTitle.textContent = title;
       els.bannerSub.textContent = sub;
@@ -278,8 +273,6 @@ export function createHud() {
     },
     showBuy(weapons, money, ownedId, armor, hasKit, grenades = [], ecoLine = '', buySeconds = 5) {
       els.buyGrid.innerHTML = '';
-      // The economy line: what the last round paid, so the player buys with
-      // the match's money story in front of them, not just a bare number.
       if (ecoLine) {
         els.buyEco.textContent = ecoLine;
         els.buyEco.hidden = false;
@@ -295,31 +288,26 @@ export function createHud() {
         els.buyGrid.appendChild(div);
         return div;
       };
-      // Column 1 — Sidearms.
       const c1 = col('1 &nbsp; SIDEARMS');
       for (const w of weapons.filter((x) => x.id === 'puffin')) {
         const owned = w.id === ownedId;
         c1.appendChild(buyCard(w.id, w.name, w.price, owned ? 'EQUIPPED' : w.blurb, `DMG ${w.damage} · ${w.mag}/${w.reserve} · SEMI`, owned || money < w.price, onBuy));
       }
-      // Column 2 — Close range.
       const c2 = col('2 &nbsp; CLOSE RANGE');
       for (const w of weapons.filter((x) => x.id === 'skua' || x.id === 'cormorant')) {
         const owned = w.id === ownedId;
         const stat = w.pellets > 1 ? `DMG ${w.damage}×${w.pellets} · ${w.mag}/${w.reserve} · PUMP` : `DMG ${w.damage} · ${w.mag}/${w.reserve} · AUTO`;
         c2.appendChild(buyCard(w.id, w.name, w.price, owned ? 'EQUIPPED' : w.blurb, stat, owned || money < w.price, onBuy));
       }
-      // Column 3 — Rifles.
       const c3 = col('3 &nbsp; RIFLES');
       for (const w of weapons.filter((x) => x.id === 'osprey' || x.id === 'albatross')) {
         const owned = w.id === ownedId;
         c3.appendChild(buyCard(w.id, w.name, w.price, owned ? 'EQUIPPED' : w.blurb, `DMG ${w.damage} · ${w.mag}/${w.reserve} · ${w.auto ? 'AUTO' : 'SEMI'}${w.zoom > 1 ? ' · SCOPE' : ''}`, owned || money < w.price, onBuy));
       }
-      // Column 4 — Gear.
       const c4 = col('4 &nbsp; GEAR');
       c4.appendChild(buyCard('armor', 'Plated Vest', 650, armor > 0 ? 'EQUIPPED' : '50 armour, absorbs half of every hit.', '', armor > 0 || money < 650, onBuy));
       c4.appendChild(buyCard('helmet', 'Vest + Helmet', 1000, armor >= 100 ? 'EQUIPPED' : '100 armour and a helmet.', '', armor >= 100 || money < 1000, onBuy));
       c4.appendChild(buyCard('kit', 'Defuse Kit', 400, hasKit ? 'OWNED' : 'Defuse in 2.5 s instead of 5.', '', hasKit || money < 400, onBuy));
-      // Column 5 — Grenades. Max 2 of each per round.
       const c5 = col('5 &nbsp; GRENADES');
       for (const g of grenades) {
         const full = g.count >= 2;
@@ -348,7 +336,8 @@ export function createHud() {
         const acc = stats.accuracy ?? 0;
         const hs = stats.headshots ?? 0;
         const dmg = stats.damage ?? 0;
-        els.stats.textContent = `You: ${stats.kills} kills · ${stats.deaths} deaths · $${stats.earned.toLocaleString()} earned — MVP: ${stats.mvp} · ${acc}% accuracy · ${hs} headshots · ${dmg.toLocaleString()} damage`;
+        const hist = stats.history ? ` · Rounds: ${stats.history.split('').join(' ')}` : '';
+        els.stats.textContent = `You: ${stats.kills} kills · ${stats.deaths} deaths · $${stats.earned.toLocaleString()} earned — MVP: ${stats.mvp} · ${acc}% accuracy · ${hs} headshots · ${dmg.toLocaleString()} damage${hist}`;
         show(els.stats);
       } else {
         hide(els.stats);
@@ -359,9 +348,6 @@ export function createHud() {
     hideOverlay() { hide(els.overlay); },
     onPlay(handler) { els.play.addEventListener('click', handler); },
     onBuy(handler) { this._onBuy = handler; },
-    // Settings: mouse sensitivity and master volume, on the start and pause
-    // overlays. The sliders report live, so a player can feel the sensitivity
-    // change before the match starts; the values are applied by main.js.
     onSettings(handler) { if (els.settingsBtn) els.settingsBtn.addEventListener('click', handler); },
     openSettings(current, onChange) {
       if (!els.settingsPanel) return;

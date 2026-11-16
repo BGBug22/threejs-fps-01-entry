@@ -301,6 +301,11 @@ export function createBots(scene, world) {
         bot.goalSite = bot.goalSite === 'A' ? 'B' : 'A';
         if (ctx.radio) ctx.radio(`${bot.name}: PUSH NOW — no more waiting, all on ${bot.goalSite}!`, bot.team);
       }
+      // The player's callout (X) overrides the plan: while it is live, the
+      // whole attacking team commits to the called site, lurker included.
+      if (bot.team === ctx.attackTeam && ctx.callout && charge.state !== 'planted') {
+        bot.goalSite = ctx.callout;
+      }
 
       if (bot.team === ctx.attackTeam && charge.state === 'carried' && charge.carrier === 'player' && ctx.roundAge > STALL_AT && !tookCharge) {
         const dPlayer = Math.hypot(bot.pos.x - ctx.playerPos.x, bot.pos.z - ctx.playerPos.z);

@@ -1,6 +1,5 @@
-// Battle feedback: tracers, impact sparks, the charge explosion, smoke, fire and
-// the flare's hanging orange glare. Everything is pooled and fades fast, so a long
-// firefight never leaks meshes.
+// GULLHAVEN effects: tracers, impacts, smoke, fire, flare and glare bursts,
+// muzzle stars and the explosion. All pooled and stepped from one place.
 import * as THREE from 'three';
 import { PALETTE } from './palette.js';
 
@@ -47,9 +46,6 @@ export function createFx(scene) {
   let boomLife = 0;
   let shake = 0;
 
-  // Smoke clouds: pooled groups of soft grey spheres that bloom where a smoke
-  // grenade lands and hang for 12 s. A cloud blocks sight (bots.js asks
-  // smokeBlocks before it lets a bot see through), never bullets.
   const smokes = [];
   const smokeMat = new THREE.MeshBasicMaterial({ color: new THREE.Color('#cfd6d4'), transparent: true, opacity: 0.55, depthWrite: false });
   for (let i = 0; i < SMOKE_POOL; i += 1) {
@@ -68,8 +64,6 @@ export function createFx(scene) {
   }
   let smokeCursor = 0;
 
-  // Molotov fire: pooled patches of flame cones + a light, burning ~6 s. A fire
-  // zone is area denial: grenades.js ticks damage on anything standing in it.
   const FIRE_POOL = 3;
   const FIRE_LIFE = 6;
   const FIRE_RADIUS = 3.2;
@@ -106,8 +100,6 @@ export function createFx(scene) {
     f.light.intensity = 60;
   }
 
-  // Flare pop: a hot orange sphere + light that hangs for 2 s, longer and warmer
-  // than a flashbang — the lane stays lit while the blinded bots stumble.
   const flareBall = new THREE.Mesh(
     new THREE.SphereGeometry(0.7, 14, 10),
     new THREE.MeshBasicMaterial({ color: new THREE.Color('#ff8c2e'), transparent: true, opacity: 0, depthWrite: false }),
@@ -127,10 +119,6 @@ export function createFx(scene) {
     flareLight.intensity = 160;
   }
 
-  // Glare pop: a white sphere + white light that spikes and dies in under a
-  // second. Same shape as the flare's burst, opposite character: the flare
-  // hangs and warms the lane, the glare is a camera flash — gone before the
-  // bots finish blinking, which is the point.
   const glareBall = new THREE.Mesh(
     new THREE.SphereGeometry(0.9, 14, 10),
     new THREE.MeshBasicMaterial({ color: new THREE.Color('#ffffff'), transparent: true, opacity: 0, depthWrite: false }),
@@ -161,7 +149,6 @@ export function createFx(scene) {
     cloud.group.scale.setScalar(0.3);
   }
 
-  // Segment-sphere test: does the sight line from -> to pass through a live cloud?
   function smokeBlocks(from, to) {
     const dx = to.x - from.x;
     const dy = to.y - from.y;
@@ -284,7 +271,6 @@ export function createFx(scene) {
       flareLight.intensity = 160 * k;
       if (flareLife <= 0) { flareBall.visible = false; flareLight.intensity = 0; }
     }
-    // The glare burns out in 0.9 s and shrinks as it fades — a flash, not a fire.
     if (glareLife > 0) {
       glareLife -= dt;
       const k = Math.max(0, glareLife) / 0.9;
@@ -293,7 +279,6 @@ export function createFx(scene) {
       glareLight.intensity = 220 * k;
       if (glareLife <= 0) { glareBall.visible = false; glareLight.intensity = 0; }
     }
-    // Molotov flames flicker and shrink as the pool burns out.
     for (const f of fires) {
       if (f.life <= 0) continue;
       f.life -= dt;

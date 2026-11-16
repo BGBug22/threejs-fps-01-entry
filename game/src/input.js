@@ -1,6 +1,5 @@
-// Keyboard, mouse and pointer lock. It never touches the simulation: it reports keys,
-// mouse deltas and clicks, and main.js decides what they mean. Right mouse is the zoom
-// (aim-down-sights) hold; B opens the requisition menu; E is use (plant / defuse / pick up).
+// GULLHAVEN input: one table drives every listener, so a new binding is one
+// row. Mouse deltas are scaled by the sensitivity the settings panel owns.
 export function createInput(dom, onLockChange) {
   const state = { keys: new Set(), firing: false, zooming: false };
   let locked = false;
@@ -8,10 +7,6 @@ export function createInput(dom, onLockChange) {
   let lookX = 0;
   let lookY = 0;
 
-  // One table drives every listener, so adding a binding is one row, not
-  // another stray addEventListener somewhere down the file. Keys are tracked
-  // in a set (main.js reads them by code); mouse buttons map to the two
-  // held states through the button table below.
   const keyHandlers = {
     keydown(event) {
       if (event.repeat) return;
@@ -63,8 +58,6 @@ export function createInput(dom, onLockChange) {
     isLocked() {
       return locked;
     },
-    // Sensitivity scales the raw mouse deltas: 1 is the tuned default,
-    // 0.3 is slow and steady, 2 is flick-fast. The settings panel owns it.
     setSensitivity(value) {
       sensitivity = Math.max(0.3, Math.min(2, value));
     },

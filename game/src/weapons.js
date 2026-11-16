@@ -1,7 +1,6 @@
-// The five weapons, named for harbour birds. Each definition is the whole balance
-// of the gun: damage, headshot multiplier, magazine, fire gap, reload time and how
-// much moving opens its spread. The Cormorant 12 is a true shotgun: six pellets
-// per trigger pull, each its own ray.
+// GULLHAVEN arsenal: five sea-bird guns, from the free Puffin P9 to the scoped
+// Albatross 7. The Cormorant 12 is a true shotgun — six pellets, six rays.
+// The viewmodel is a modelled gun, not a box, with a deterministic spray.
 import * as THREE from 'three';
 import { PALETTE } from './palette.js';
 
@@ -44,10 +43,6 @@ export const HELMET_PRICE = 1000;
 export const HELMET_VALUE = 100;
 export const KIT_PRICE = 400;
 
-// The view model: a multi-part gun that lives on the camera — receiver, long
-// barrel with a muzzle brake, angled magazine, foregrip, stock and a sight on
-// top — with a star-shaped muzzle flash and a kick that settles back. It owns
-// the magazine and the reload, never the ray.
 export function createWeaponView(camera) {
   const grip = new THREE.MeshStandardMaterial({ color: new THREE.Color(PALETTE.hairline), roughness: 0.7, metalness: 0.2 });
   const body = new THREE.MeshStandardMaterial({ color: new THREE.Color(PALETTE.ink), roughness: 0.5, metalness: 0.35 });
@@ -55,7 +50,6 @@ export function createWeaponView(camera) {
   const dark = new THREE.MeshStandardMaterial({ color: new THREE.Color('#1d2a33'), roughness: 0.6, metalness: 0.3 });
 
   const model = new THREE.Group();
-  // Dark sea-blue rifle, bright accents: the gun must read as a gun, not a pale plank.
   const receiver = new THREE.Mesh(new THREE.BoxGeometry(0.1, 0.11, 0.46), dark);
   const barrel = new THREE.Mesh(new THREE.BoxGeometry(0.05, 0.05, 0.44), grip);
   barrel.position.set(0, 0.03, -0.42);
@@ -78,8 +72,6 @@ export function createWeaponView(camera) {
   model.position.set(0.28, -0.25, -0.46);
   camera.add(model);
 
-  // Star-shaped muzzle flash: a canvas-drawn 4-point star, so the shot reads
-  // as a burst of light even in a still screenshot.
   function starTexture() {
     const c = document.createElement('canvas');
     c.width = 128;
@@ -101,10 +93,6 @@ export function createWeaponView(camera) {
     g.fill();
     return new THREE.CanvasTexture(c);
   }
-  // The star draws on top of the world (like a real view-model flash) and is
-  // big enough to read against the bright dusk quay. Normal blending, not
-  // additive: an additive star vanishes against the bright orange walls and
-  // the white smoke, a solid yellow star reads on any background.
   const flash = new THREE.Mesh(
     new THREE.PlaneGeometry(0.55, 0.55),
     new THREE.MeshBasicMaterial({ map: starTexture(), transparent: true, opacity: 0.95, depthWrite: false, depthTest: false, side: THREE.DoubleSide }),
@@ -150,7 +138,6 @@ export function createWeaponView(camera) {
       state.id = id;
       state.def = def;
       if (keepAmmo && wasSame) {
-        // same gun re-selected: keep the magazine, keep the reserve
         state.mag = Math.min(def.mag, oldMag);
       } else {
         state.mag = def.mag;
@@ -172,10 +159,6 @@ export function createWeaponView(camera) {
       state.cooldown = state.def.gap;
       state.flash = 0.2;
       state.kick = state.id === 'albatross' ? 0.12 : state.id === 'cormorant' ? 0.09 : 0.055;
-      // Show the flash immediately: in the screenshot the frame loop may not
-      // run another fixed step before the capture, and step() is the only
-      // other place that sets flash.visible — without this the star never
-      // appears in a captured frame.
       flash.visible = true;
       flashLight.intensity = 22;
     },
