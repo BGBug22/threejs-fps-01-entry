@@ -1,10 +1,7 @@
-// GULLHAVEN — main loop. Owns the match: rounds, freeze/buy time, economy,
-// the objective, shooting, spectating and the deterministic ?shot= modes the
-// kit's screenshots use. Bots, movement and the world live in their own modules.
-// Decisive by design: 90 s rounds, the carrier rushes one site with escorts,
-// and at 40 s without a plant the whole attacking team pushes at once —
-// a round always ends with a winner, never a clock. If the player stalls with
-// the charge, a Gull takes it and plants it.
+// GULLHAVEN main loop: rounds, economy, buy menu, Tide Charge, shots, HUD wiring.
+// Bots are decisive by design: the carrier rushes a site from second 1, an
+// anti-stall clock pushes the whole attack at 40 s, and a stalling player
+// loses the charge to a Gull who sprints to plant it.
 import * as THREE from 'three';
 import { PALETTE } from './palette.js';
 import { createWorld } from './world.js';
@@ -49,26 +46,19 @@ function mulberry32(initial) {
 
 const seedBase = shotMode ? seedParam : (Date.now() % 100000);
 const rng = mulberry32(seedBase);
-// The cover's last shot fires in the frame just before __shotReady (see the
-// double-RAF at the end of setupShot), not at the end of the sim loop.
 let finalShotPending = false;
 
-// Deterministic spray pattern: consecutive shots climb and drift in a fixed
-// table instead of pure random spread, so recoil is learnable; the pattern
-// resets after a 0.4 s pause, a reload or a weapon switch (judge criterion 2:
-// recoil and spread punish firing on the move).
 const SPRAY = [0, 0.3, 0.55, 0.8, 1, 0.9, 0.7, 0.45, 0.2, 0, -0.25, -0.45, -0.3, -0.1, 0, 0.15];
 let sprayIdx = 0;
 let lastShotAt = -99;
 
-// --- renderer / scene ---
 const renderer = new THREE.WebGLRenderer({ antialias: true });
 renderer.setSize(window.innerWidth, window.innerHeight);
 renderer.setPixelRatio(Math.min(window.devicePixelRatio, 2));
 renderer.shadowMap.enabled = true;
 renderer.shadowMap.type = THREE.PCFSoftShadowMap;
 renderer.toneMapping = THREE.ACESFilmicToneMapping;
-renderer.toneMappingExposure = 1.5; // dusk harbour: warm sun, readable shadows
+renderer.toneMappingExposure = 1.5;
 document.getElementById('app').prepend(renderer.domElement);
 
 const scene = new THREE.Scene();
@@ -96,10 +86,9 @@ const input = createInput(renderer.domElement, (locked) => {
 const hud = createHud();
 hud.setMinimapWalls(world.minimapRects);
 
-// --- match state ---
 let time = 0;
 let roundStart = 0;
-let phase = 'menu'; // menu | freeze | live | over
+let phase = 'menu';
 let paused = false;
 let freezeTimer = FREEZE_TIME;
 let roundTimer = ROUND_TIME;
@@ -110,15 +99,13 @@ let bobY = 0;
 let prevFire = false;
 let prevKeys = new Set();
 let spectateTarget = null;
-const match = { gull: 0, keeper: 0, round: 1, money: START_MONEY, lossStreak: 0, attackTeam: 'gull', kills: 0, deaths: 0, earned: 0, roundKills: 0, lastIncome: '', botKills: {}, hasKit: false };
+const match = { gull: 0, keeper: 0, round: 1, money: START_MONEY, lossStreak: 0, attackTeam: 'gull', kills: 0, deaths: 0, earned: 0, roundKills: 0, totalKills: 0, lastIncome: '', botKills: {}, hasKit: false };
 const owned = new Set(['puffin']);
 const ammoStore = {};
-// Last-seen Keeper positions for the minimap: an enemy dot only shows while a
-// Gull bot is looking at it or the player just hit it (4 s), never a wallhack.
+const gunStats = { shots: 0, hits: 0, headshots: 0, damage: 0 };
 const seenKeeper = new Map();
 let mmTick = 0;
 
-// --- invisible player hitboxes for bot fire ---
 const playerMeshes = new Set();
 const playerTorso = new THREE.Mesh(new THREE.BoxGeometry(0.7, 1.15, 0.7), new THREE.MeshBasicMaterial({ visible: false }));
 playerTorso.userData.player = true;
@@ -130,7 +117,6 @@ scene.add(playerTorso, playerHead);
 playerMeshes.add(playerTorso);
 playerMeshes.add(playerHead);
 
-// --- helpers ---
 const raycaster = new THREE.Raycaster();
 function raycast(origin, dir, maxDist, exclude) {
   raycaster.set(origin, dir);
@@ -188,26 +174,39 @@ function updateScoreboard() {
   };
   fill(document.getElementById('sb-gull'), gullRows);
   fill(document.getElementById('sb-keeper'), keeperRows);
-  // Halftime switch: the scoreboard says who attacks and who defends now.
   document.getElementById('sb-gull-h').textContent = match.attackTeam === 'gull' ? 'GULLS — ATTACK' : 'GULLS — DEFEND';
   document.getElementById('sb-keeper-h').textContent = match.attackTeam === 'keeper' ? 'KEEPERS — ATTACK' : 'KEEPERS — DEFEND';
 }
 
-// --- combat ---
 function damageBot(bot, amount, part, attackerName) {
-  // The minimap remembers where the player just hit an enemy.
   if (attackerName === 'You') seenKeeper.set(bot.id, { x: bot.pos.x, z: bot.pos.z, at: time });
   const died = bots.damage(bot, amount);
   if (died) {
-    hud.killfeed(attackerName, bot.name, part === 'head', 'gull');
+    const weaponName = attackerName === 'You' ? weaponView.state.def.name : '';
+    hud.killfeed(attackerName, bot.name, part === 'head', 'gull', weaponName);
+    match.totalKills += 1;
     if (attackerName === 'You') {
       match.money += KILL_REWARD;
       match.kills += 1;
       match.roundKills += 1;
       match.earned += KILL_REWARD;
       hud.setMoney(match.money);
+      if (match.totalKills === 1) {
+        match.money += 150;
+        match.earned += 150;
+        hud.setMoney(match.money);
+        hud.radio('You: First blood! +$150', 'gull');
+      }
+      if (match.roundKills === 3) {
+        match.money += 500;
+        match.earned += 500;
+        hud.setMoney(match.money);
+        hud.radio('You: Ace! Three in one round — +$500', 'gull');
+        hud.banner('ACE', 'Three kills in one round — +$500', 2600);
+      }
     } else {
       match.botKills[attackerName] = (match.botKills[attackerName] || 0) + 1;
+      if (match.totalKills === 1) hud.radio(`${attackerName}: First blood!`, 'keeper');
     }
     if (bot.carrier) charge.drop(bot.pos);
     updateScoreboard();
@@ -217,7 +216,7 @@ function damageBot(bot, amount, part, attackerName) {
 }
 
 function damagePlayer(amount, fromPos, attackerName) {
-  if (shotMode === 'play' || shotMode === 'half') return; // god mode for the staged screenshots
+  if (shotMode === 'play' || shotMode === 'half') return;
   if (!player.state.alive || phase !== 'live') return;
   const died = player.damage(amount);
   hud.damageFlash();
@@ -244,20 +243,18 @@ function tryShoot() {
   }
   weaponView.pullTrigger();
   weaponView.takeRound();
+  gunStats.shots += 1;
   const def = w.def;
   const zoomed = input.state.zooming && def.id === 'albatross';
   const spread = weaponView.spread(player.groundSpeed()) * (zoomed ? 0.4 : 1);
   const dir = new THREE.Vector3();
   camera.getWorldDirection(dir);
-  // Random spread plus the deterministic spray pattern: the first shots of a
-  // burst stay tight, later shots climb and drift in a fixed order.
   if (time - lastShotAt > 0.4) sprayIdx = 0;
   lastShotAt = time;
   const spray = SPRAY[sprayIdx % SPRAY.length];
   sprayIdx += 1;
   const origin = camera.position.clone();
   const muzzle = camera.localToWorld(new THREE.Vector3(0.24, -0.16, -0.7));
-  // The Cormorant fires six pellets, each its own ray; the rest fire one.
   for (let p = 0; p < def.pellets; p += 1) {
     const pdir = dir.clone();
     pdir.x += (Math.random() * 2 - 1) * spread * 0.6 + spray * spread * 1.4;
@@ -270,10 +267,11 @@ function tryShoot() {
     if (hit) {
       fx.impact(hit.point);
       const hitBot = hit.object.userData.bot;
-      // No friendly fire: a teammate in the line of fire stops the bullet, but
-      // takes no damage and never shows in the killfeed as your victim.
       if (hitBot && hitBot.alive && hitBot.team === 'keeper') {
         const dmg = def.damage * (hit.object.userData.part === 'head' ? def.headMult : 1);
+        gunStats.hits += 1;
+        gunStats.damage += Math.round(dmg);
+        if (hit.object.userData.part === 'head') gunStats.headshots += 1;
         const died = damageBot(hitBot, dmg, hit.object.userData.part, 'You');
         hud.hitMarker(died);
         sound(died ? 'kill' : 'hit');
@@ -281,7 +279,6 @@ function tryShoot() {
     }
   }
   sound('shot', def.id);
-  // Every shot is a sound event: bots inside 20 m hear it, turn, and call it in.
   if (ctx) ctx.noise(origin, 'shot', 20, null);
   player.recoil(def.id === 'albatross' ? 0.05 : def.id === 'cormorant' ? 0.04 : 0.011, (Math.random() - 0.5) * 0.006);
   if (w.mag === 0 && w.reserve > 0) { weaponView.reload(); sound('reload'); }
@@ -289,7 +286,7 @@ function tryShoot() {
 
 function switchWeapon(id) {
   if (!owned.has(id)) return;
-  sprayIdx = 0; // a new gun starts a fresh spray pattern
+  sprayIdx = 0;
   const cur = weaponView.state.id;
   ammoStore[cur] = { mag: weaponView.state.mag, reserve: weaponView.state.reserve };
   weaponView.setWeapon(id, false);
@@ -299,15 +296,12 @@ function switchWeapon(id) {
   sound('click');
 }
 
-// --- grenades ---
 function grenadeShop() {
   return Object.values(GRENADES).map((g) => ({ ...g, count: grenades.inventory[g.id] }));
 }
 
 function throwPlayerGrenade(type) {
   if (!player.state.alive || phase !== 'live') return false;
-  // Throw from the player's eye along their aim — the camera follows the same
-  // state in live play, and in the scripted shot the camera is not placed yet.
   const yaw = player.state.yaw;
   const pitch = player.state.pitch;
   const dir = new THREE.Vector3(
@@ -327,8 +321,6 @@ function throwPlayerGrenade(type) {
   return true;
 }
 
-// Aim the player at one Keeper bot and fire once. Used by the scripted cover
-// shot so the frame holds a real tracer and muzzle flash.
 function nearestKeeperBot() {
   let best = null;
   let bestD = Infinity;
@@ -340,10 +332,6 @@ function nearestKeeperBot() {
   return best;
 }
 
-// Put the camera where the player stands, exactly as render() does each
-// frame. In the scripted shot render() has not run yet, so without this the
-// camera still sits at the world origin and every scripted shot fires from
-// the floor at (0,0,0) instead of from the player's eye.
 function syncCamera() {
   camera.position.set(player.state.position.x, player.state.position.y + player.state.eye, player.state.position.z);
   camera.rotation.set(player.state.pitch, player.state.yaw, 0, 'YXZ');
@@ -367,9 +355,6 @@ function fireAtNearestKeeper() {
   fireAtBot(nearestKeeperBot());
 }
 
-// The nearest Keeper bot the player can actually see — the ray must reach the
-// bot itself, not a wall. A burst at a bot behind the mid wall would only
-// chip paint off the wall.
 function visibleKeeperBot() {
   const eye = new THREE.Vector3(player.state.position.x, player.state.position.y + player.state.eye, player.state.position.z);
   let best = null;
@@ -385,7 +370,6 @@ function visibleKeeperBot() {
   return best;
 }
 
-// --- minimap ---
 function updateMinimap() {
   const gull = [];
   for (const b of bots.list) if (b.team === 'gull' && b.alive) gull.push({ x: b.pos.x, z: b.pos.z });
@@ -410,7 +394,6 @@ function updateMinimap() {
   });
 }
 
-// --- rounds ---
 function checkRoundEnd() {
   if (phase !== 'live') return;
   const gullAlive = (player.state.alive ? 1 : 0) + bots.aliveCount('gull');
@@ -422,8 +405,6 @@ function checkRoundEnd() {
 function endRound(winner, reason) {
   if (phase !== 'live') return;
   phase = 'over';
-  // Economy: the round reward plus the kills the player banked this round —
-  // the buy menu prints this line next round, so the money is legible.
   let reward = 0;
   if (winner === 'gull') {
     match.gull += 1;
@@ -448,7 +429,6 @@ function endRound(winner, reason) {
   charge.reset();
   const matchOver = match.gull >= WIN_ROUNDS || match.keeper >= WIN_ROUNDS || match.round >= MAX_ROUNDS;
   if (matchOver) {
-    // Victory screen: final score, the player's line and the MVP.
     let mvp = 'You';
     let bestK = match.kills;
     for (const [name, k] of Object.entries(match.botKills)) {
@@ -456,9 +436,11 @@ function endRound(winner, reason) {
     }
     setTimeout(() => {
       phase = 'menu';
+      const acc = gunStats.shots > 0 ? Math.round((gunStats.hits / gunStats.shots) * 100) : 0;
       hud.showOverlay('end', `${match.gull} - ${match.keeper}`, {
         result: match.gull > match.keeper ? 'GULLS WIN THE QUAY' : 'KEEPERS WIN THE QUAY',
         kills: match.kills, deaths: match.deaths, earned: match.earned, mvp,
+        accuracy: acc, headshots: gunStats.headshots, damage: gunStats.damage,
       });
       input.releaseLock();
     }, 3200);
@@ -469,9 +451,6 @@ function endRound(winner, reason) {
 
 function startRound(n) {
   match.round = n;
-  // Halftime switch: rounds 1-4 Gulls attack, rounds 5-9 Gulls defend
-  // and the charge starts with a Keeper carrier. The player spawns south to
-  // attack, north to defend, and the bots swap roles with them.
   const defending = n > 4;
   match.attackTeam = defending ? 'keeper' : 'gull';
   match.roundKills = 0;
@@ -529,9 +508,14 @@ function startMatch() {
   match.deaths = 0;
   match.earned = 0;
   match.roundKills = 0;
+  match.totalKills = 0;
   match.lastIncome = '';
   match.botKills = {};
   match.hasKit = false;
+  gunStats.shots = 0;
+  gunStats.hits = 0;
+  gunStats.headshots = 0;
+  gunStats.damage = 0;
   owned.clear();
   owned.add('puffin');
   for (const k of Object.keys(ammoStore)) delete ammoStore[k];
@@ -540,7 +524,6 @@ function startMatch() {
   startRound(1);
 }
 
-// --- bot context ---
 const ctx = {
   get time() { return time; },
   get roundAge() { return time - roundStart; },
@@ -558,16 +541,10 @@ const ctx = {
   impact: (p) => fx.impact(p),
   sound: (kind, arg) => sound(kind, arg),
   nearPlayer: (pos) => pos.distanceTo(player.state.position) < 30,
-  // Hearing: a shot, an explosion or a flare pop reaches every bot in radius.
   noise: (pos, kind, radius, shooter) => bots.hearNoise(ctx, pos, kind, radius, shooter),
-  // Radio: bots report what they hear and see; the log is the HUD's left column.
   radio: (text, team) => hud.radio(text, team),
-  // Smoke clouds block bot sight (never bullets).
   smokeBlocks: (a, b) => fx.smokeBlocks(a, b),
-  // The team's bot grenades: one smoke and one flare and one Molotov per round,
-  // thrown by name so the killfeed credits the thrower.
   throwGrenade: (type, origin, dir, thrower) => grenades.throwBot(type, origin, dir, thrower),
-  // A flare pop blinds bots facing it, and the player if they face it too.
   blind: (pos, seconds) => {
     bots.blind(ctx, pos, seconds);
     if (player.state.alive && phase === 'live') {
@@ -587,7 +564,6 @@ const ctx = {
   },
   onDefused: (bot) => {
     hud.banner('CHARGE DEFUSED', `${bot.name} defused the Tide Charge`, 3000);
-    // The defending team wins the round on a defuse, whichever side that is.
     endRound(match.attackTeam === 'gull' ? 'keeper' : 'gull', 'Tide Charge defused');
   },
   onPickup: (bot) => {
@@ -606,16 +582,24 @@ const chargeCtx = {
   onDetonate: () => {
     fx.explosion(charge.state.pos);
     sound('explosion');
-    // Whoever attacked wins the round when the charge goes off.
     endRound(match.attackTeam, 'Tide Charge detonated');
   },
 };
 
-// --- input wiring ---
+const settings = { sensitivity: 1, volume: 1 };
+function applySettings(next) {
+  settings.sensitivity = Math.max(0.3, Math.min(2, next.sensitivity));
+  settings.volume = Math.max(0, Math.min(1, next.volume));
+  input.setSensitivity(settings.sensitivity);
+  audio.setVolume(settings.volume);
+}
 hud.onPlay(() => {
   audio.resume();
   if (phase === 'menu') startMatch();
   else if (paused) input.requestLock();
+});
+hud.onSettings(() => {
+  hud.openSettings(settings, applySettings);
 });
 
 hud.onBuy((id) => {
@@ -652,7 +636,7 @@ hud.onBuy((id) => {
     }
     return;
   }
-  if (id === 'frag' || id === 'smoke' || id === 'flare' || id === 'molotov') {
+  if (id === 'frag' || id === 'smoke' || id === 'flare' || id === 'molotov' || id === 'glare') {
     const g = GRENADES[id];
     if (match.money >= g.price && grenades.buy(id)) {
       match.money -= g.price;
@@ -693,7 +677,6 @@ window.addEventListener('resize', () => {
   renderer.setSize(window.innerWidth, window.innerHeight);
 });
 
-// --- fixed step ---
 function pressed(code) {
   return input.state.keys.has(code) && !prevKeys.has(code);
 }
@@ -719,7 +702,6 @@ function fixedStep(dt) {
     } else if (phase === 'live') {
       if (charge.state.state !== 'planted') {
         roundTimer -= dt;
-        // Time out: the defenders win — the attackers never got the charge in.
         if (roundTimer <= 0) endRound(match.attackTeam === 'gull' ? 'keeper' : 'gull', 'Time expired — the charge was never planted');
       }
       charge.update(dt, chargeCtx);
@@ -732,7 +714,6 @@ function fixedStep(dt) {
       bobPhase += player.groundSpeed() * dt * 1.7;
       bobY = Math.sin(bobPhase * 2) * 0.03 * Math.min(1, player.groundSpeed() / 5);
 
-      // firing
       const firing = input.state.firing;
       const semi = !weaponView.state.def.auto;
       if (firing && (!semi || !prevFire)) tryShoot();
@@ -750,8 +731,8 @@ function fixedStep(dt) {
       if (pressed('Digit5')) throwPlayerGrenade('smoke');
       if (pressed('Digit6')) throwPlayerGrenade('flare');
       if (pressed('Digit7')) throwPlayerGrenade('molotov');
+      if (pressed('Digit8')) throwPlayerGrenade('glare');
 
-      // plant channel
       if (charge.state.state === 'carried' && charge.state.carrier === 'player') {
         const site = siteAt(player.state.position);
         if (site && keys.has('KeyE') && player.groundSpeed() < 1.0) {
@@ -775,9 +756,6 @@ function fixedStep(dt) {
         hud.plantProgress(null);
       }
 
-      // Defuse: after the halftime switch the player defends, so hold E by the
-      // planted charge to stop it. 5 s normally, 2.5 s with a defuse kit — and
-      // a defuse wins the round for the defending side.
       if (charge.state.state === 'planted' && match.attackTeam === 'keeper' && player.state.alive) {
         const dCharge = player.state.position.distanceTo(charge.state.pos);
         if (dCharge < 3 && keys.has('KeyE') && player.groundSpeed() < 1.0) {
@@ -799,8 +777,6 @@ function fixedStep(dt) {
         defuseProgress = 0;
       }
 
-      // pick up a dropped charge — only while Gulls attack; after the switch
-      // the charge belongs to the Keeper push, and the player must not take it.
       if (charge.state.state === 'dropped' && match.attackTeam === 'gull' && player.state.position.distanceTo(charge.state.pos) < 1.4) {
         charge.pickup('player');
         hud.banner('CHARGE RECOVERED', 'Plant it at Lantern Hall or Cannery', 2000);
@@ -826,7 +802,7 @@ function fixedStep(dt) {
     bots.step(dt, ctx);
     grenades.step(dt, ctx);
     weaponView.step(dt);
-    if (weaponView.state.reloadLeft > 0) sprayIdx = 0; // a reload restarts the spray pattern
+    if (weaponView.state.reloadLeft > 0) sprayIdx = 0;
     fx.step(dt);
     world.step(dt, time);
     mmTick += 1;
@@ -834,11 +810,9 @@ function fixedStep(dt) {
     prevKeys = new Set(keys);
   }
 
-  // hitboxes follow the player
   playerTorso.position.set(player.state.position.x, player.state.position.y + 0.575, player.state.position.z);
   playerHead.position.set(player.state.position.x, player.state.position.y + 1.55, player.state.position.z);
 
-  // HUD sync
   hud.setHealth(player.state.health, player.state.armor);
   hud.setAmmo(weaponView.state.mag, weaponView.state.reserve, weaponView.state.def.name.toUpperCase());
   hud.setMoney(match.money);
@@ -863,7 +837,6 @@ function fixedStep(dt) {
   }
 }
 
-// --- render ---
 function render() {
   if (player.state.alive) {
     camera.position.set(player.state.position.x, player.state.position.y + player.state.eye + bobY, player.state.position.z);
@@ -891,20 +864,14 @@ function render() {
   renderer.render(scene, camera);
 }
 
-// --- shot modes ---
 function setupShot() {
   if (shotMode === 'buy') {
     startRound(1);
     hud.hideOverlay();
-    // Staged: $4,050 in hand shows the menu's states — the Albatross is Too
-    // expensive, the rest buyable — with the economy line of a won round.
     match.money = 4050;
     match.lastIncome = 'Round won +$3,250 · 2 kills +$600';
     hud.showBuy(Object.values(WEAPONS), match.money, weaponView.state.id, player.state.armor, match.hasKit, grenadeShop(), match.lastIncome, 5);
   } else if (shotMode === 'half') {
-    // Halftime: round 5, sides switched — the player defends from the north
-    // spawn while the Keepers push the charge south. The banner and the
-    // defend plan are the frame's proof the match has two halves.
     startRound(5);
     hud.hideBuy();
     hud.hideOverlay();
@@ -916,68 +883,49 @@ function setupShot() {
       scene.updateMatrixWorld(true);
       if (phase !== 'live') break;
     }
-    // Re-show the halftime banner for the capture: the sim loop runs long
-    // enough in wall time that the banner's 2.2 s timer can lapse first.
-    // Staged for the screenshot — 60 s, so the capture always catches it.
     hud.banner('HALFTIME — SIDES SWITCHED', 'You defend now — hold the sites and defuse the charge', 60000);
   } else if (shotMode === 'play') {
     match.money = 800;
     owned.add('osprey');
     switchWeapon('osprey');
     player.state.armor = 50;
-    // At the west gap itself: the LANTERN HALL sign dead ahead, the
-    // lighthouse tower left of it, and the defenders rotating to Site A
-    // visible through the gap — the burst can finally see them.
     player.reset(new THREE.Vector3(-15, 0, 0), 0.0);
     phase = 'live';
     roundTimer = ROUND_TIME;
     bots.spawnRound(1, seedBase + 108);
     charge.reset();
     grenades.reset();
-    grenades.buy('frag'); // the cover carries all four grenades: 1 frag, 1 smoke, 1 flare, 1 molotov
+    grenades.buy('frag');
     grenades.buy('molotov');
     hud.setGrenades(grenades.counts(), match.hasKit);
     hud.setPlan(bots.getPlan('attack'));
     hud.hideOverlay();
     hud.hideBuy();
     updateScoreboard();
-    // Seed the radio log the way the live hearing system writes it: the plan
-    // goes out first, then the callouts as the fight develops.
     hud.radio('Pip: Smoking Lantern Hall — push through it', 'gull');
     scene.updateMatrixWorld(true);
     let coverTarget = null;
     let burstLeft = 0;
     let burstDone = false;
     for (let i = 0; i < 300; i += 1) {
-      // Scripted cover action, all real simulation. A Molotov up the lane
-      // first, a late flare, then ONE three-shot burst at the first
-      // visible defender — three Osprey hits kill, so the killfeed shows a
-      // real kill. The smoke goes out late, down the lane, so it is fresh and
-      // thick in the frame. The loop stops at 300 steps (5 s): any longer and
-      // the teammates crowd into the frame at Site A and block the lighthouse.
       if (i === 90) {
-        // Yaw -0.2 sends the Molotov through the gap to Site A.
         player.state.yaw = -0.2;
         camera.rotation.y = -0.2;
         throwPlayerGrenade('molotov');
         hud.radio('You: Molotov out — Lantern Hall is burning', 'gull');
       }
       if (i === 120) {
-        // Early flare: it pops at ~i=186 and blinds the defenders, so the
-        // burst at i>=140 meets them standing still in the open.
         player.state.yaw = -0.2;
         camera.rotation.y = -0.2;
         throwPlayerGrenade('flare');
         hud.radio('You: Flare out — they are blind!', 'gull');
       }
       if (i === 140) {
-        // Yaw 0.2 sends the smoke to the lighthouse base, left of the fire.
         player.state.yaw = 0.2;
         camera.rotation.y = 0.2;
         throwPlayerGrenade('smoke');
       }
       if (i === 230) {
-        // Re-aim for the capture: tower left, site centre, quay in frame.
         player.state.yaw = 0.0;
         camera.rotation.y = 0.0;
       }
@@ -986,10 +934,6 @@ function setupShot() {
         if (vis) { coverTarget = vis; burstLeft = 3; }
       }
       if (burstLeft > 0 && i % 7 === 0) {
-        // If the target went down mid-burst (a teammate or the Molotov got
-        // them first), pick a new visible defender and keep shooting — the
-        // cover wants three shots and a kill in the killfeed, not a burst
-        // that stops at a corpse.
         if (!coverTarget || !coverTarget.alive) coverTarget = visibleKeeperBot();
         if (coverTarget) { fireAtBot(coverTarget); burstLeft -= 1; }
         else burstLeft = 0;
@@ -999,9 +943,6 @@ function setupShot() {
       scene.updateMatrixWorld(true);
       if (phase !== 'live') break;
     }
-    // The last real shot fires in the final frame callback, not here: the
-    // muzzle flash only lives 0.2 s and the driver captures ~50 ms after
-    // __shotReady, so a shot fired here would have faded before the capture.
     finalShotPending = true;
   } else if (shotMode === 'end') {
     match.gull = 5;
@@ -1013,26 +954,17 @@ function setupShot() {
     match.botKills = { Pip: 9, Tern: 7 };
     hud.setScore(5, 3, 9);
     bots.spawnRound(9, seedBase + 916, 'keeper');
-    hud.showOverlay('end', '5 - 3', { result: 'GULLS WIN THE QUAY', kills: 12, deaths: 4, earned: 14200, mvp: 'You' });
+    hud.showOverlay('end', '5 - 3', { result: 'GULLS WIN THE QUAY', kills: 12, deaths: 4, earned: 14200, mvp: 'You', accuracy: 41, headshots: 3, damage: 1480 });
     player.reset(new THREE.Vector3(-8, 0, -2), 0.5);
     phase = 'menu';
   }
   requestAnimationFrame(() => {
     render();
     requestAnimationFrame(() => {
-      // The cover's last shot fires here, in the frame just before the
-      // capture: the muzzle flash and tracer only live ~0.2 s, and the driver
-      // captures ~50 ms after __shotReady, so they are still burning.
       if (finalShotPending) {
         finalShotPending = false;
-        // The final shot fires straight down the composed view (yaw 0.0,
-        // toward Site A) WITHOUT re-aiming: the burst already put a kill in
-        // the killfeed, so this shot only has to sell the muzzle flash and a
-        // tracer toward the site — it does not need to kill.
         weaponView.state.cooldown = 0;
         tryShoot();
-        // Hold the star for the capture: the driver needs 100-250 ms to poll
-        // and capture, longer than the flash lives.
         weaponView.state.flash = 5;
       }
       render();
@@ -1051,7 +983,6 @@ if (shotMode) {
   });
 }
 
-// --- main loop ---
 let last = performance.now();
 let acc = 0;
 function frame(now) {

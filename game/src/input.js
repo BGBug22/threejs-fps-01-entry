@@ -4,23 +4,32 @@
 export function createInput(dom, onLockChange) {
   const state = { keys: new Set(), firing: false, zooming: false };
   let locked = false;
+  let sensitivity = 1;
+  let lookX = 0;
+  let lookY = 0;
 
-  function onKeyDown(event) {
-    if (event.repeat) return;
-    state.keys.add(event.code);
-    if (event.code === 'Tab') event.preventDefault();
-  }
-  function onKeyUp(event) {
-    state.keys.delete(event.code);
-  }
-  function onMouseDown(event) {
+  // One table drives every listener, so adding a binding is one row, not
+  // another stray addEventListener somewhere down the file. Keys are tracked
+  // in a set (main.js reads them by code); mouse buttons map to the two
+  // held states through the button table below.
+  const keyHandlers = {
+    keydown(event) {
+      if (event.repeat) return;
+      state.keys.add(event.code);
+      if (event.code === 'Tab') event.preventDefault();
+    },
+    keyup(event) { state.keys.delete(event.code); },
+    mousemove(event) {
+      if (!locked) return;
+      lookX += event.movementX;
+      lookY += event.movementY;
+    },
+  };
+  const buttonField = { 0: 'firing', 2: 'zooming' };
+  function onMouseButton(event, down) {
     if (!locked) return;
-    if (event.button === 0) state.firing = true;
-    if (event.button === 2) state.zooming = true;
-  }
-  function onMouseUp(event) {
-    if (event.button === 0) state.firing = false;
-    if (event.button === 2) state.zooming = false;
+    const field = buttonField[event.button];
+    if (field) state[field] = down;
   }
   function onLock() {
     locked = document.pointerLockElement === dom;
@@ -34,19 +43,9 @@ export function createInput(dom, onLockChange) {
     event.preventDefault();
   }
 
-  let lookX = 0;
-  let lookY = 0;
-  function onMouseMove(event) {
-    if (!locked) return;
-    lookX += event.movementX;
-    lookY += event.movementY;
-  }
-
-  document.addEventListener('keydown', onKeyDown);
-  document.addEventListener('keyup', onKeyUp);
-  document.addEventListener('mousemove', onMouseMove);
-  document.addEventListener('mousedown', onMouseDown);
-  document.addEventListener('mouseup', onMouseUp);
+  for (const [type, handler] of Object.entries(keyHandlers)) document.addEventListener(type, handler);
+  document.addEventListener('mousedown', (event) => onMouseButton(event, true));
+  document.addEventListener('mouseup', (event) => onMouseButton(event, false));
   document.addEventListener('pointerlockchange', onLock);
   dom.addEventListener('contextmenu', onContextMenu);
 
@@ -64,8 +63,14 @@ export function createInput(dom, onLockChange) {
     isLocked() {
       return locked;
     },
+    // Sensitivity scales the raw mouse deltas: 1 is the tuned default,
+    // 0.3 is slow and steady, 2 is flick-fast. The settings panel owns it.
+    setSensitivity(value) {
+      sensitivity = Math.max(0.3, Math.min(2, value));
+    },
+    get sensitivity() { return sensitivity; },
     takeLook() {
-      const out = { x: lookX, y: lookY };
+      const out = { x: lookX * sensitivity, y: lookY * sensitivity };
       lookX = 0;
       lookY = 0;
       return out;

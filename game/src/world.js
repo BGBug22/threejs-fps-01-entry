@@ -1,32 +1,28 @@
-// GULLHAVEN "Quay 9": a dusk fishing harbour, 40 x 30 m. Two charge sites
-// (A Lantern Hall north-west, B Cannery north-east), three lanes split by a mid
-// wall with three gaps, and cover everywhere a firefight needs it. A lighthouse
-// tower sweeps a real beam over the quay, a beached fishing boat blocks the mid
-// lane, and gulls circle overhead. Every solid is a collider and a surface a
-// bullet stops on. Waypoints are the graph the bots walk.
+// GULLHAVEN Quay 9: a dusk fishing harbour — Lantern Hall (A) and Cannery (B),
+// a red-and-white lighthouse with a sweeping beam, a beached boat, fish-market
+// stalls along the south wall, wet cobbles, gulls circling overhead.
 import * as THREE from 'three';
 import { PALETTE } from './palette.js';
 
 const WAYPOINTS = [
-  // x, z, links
-  [0, 12.5, [1, 2, 5]], // 0 attacker spawn
-  [-8, 9, [0, 3, 5]], // 1
-  [8, 9, [0, 4, 5]], // 2
-  [-16, 7, [1, 6, 14]], // 3 west lane south
-  [16, 7, [2, 7, 15]], // 4 east lane south
-  [0, 5, [0, 1, 2, 8]], // 5 mid south
-  [-16, -6, [3, 9, 14]], // 6 west lane north
-  [16, -6, [4, 10, 15]], // 7 east lane north
-  [0, -6, [5, 8, 16, 17]], // 8 mid north
-  [-13, -10, [6, 16, 11]], // 9 site A
-  [13, -10, [7, 17, 12]], // 10 site B
-  [-8, -13, [9, 13, 16]], // 11 defender west
-  [8, -13, [10, 13, 17]], // 12 defender east
-  [0, -13, [11, 12, 8]], // 13 defender mid
-  [-16, 0, [3, 6]], // 14 west mid
-  [16, 0, [4, 7]], // 15 east mid
-  [-8, -10, [8, 9, 11]], // 16 A approach
-  [8, -10, [8, 10, 12]], // 17 B approach
+  [0, 12.5, [1, 2, 5]],
+  [-8, 9, [0, 3, 5]],
+  [8, 9, [0, 4, 5]],
+  [-16, 7, [1, 6, 14]],
+  [16, 7, [2, 7, 15]],
+  [0, 5, [0, 1, 2, 8]],
+  [-16, -6, [3, 9, 14]],
+  [16, -6, [4, 10, 15]],
+  [0, -6, [5, 8, 16, 17]],
+  [-13, -10, [6, 16, 11]],
+  [13, -10, [7, 17, 12]],
+  [-8, -13, [9, 13, 16]],
+  [8, -13, [10, 13, 17]],
+  [0, -13, [11, 12, 8]],
+  [-16, 0, [3, 6]],
+  [16, 0, [4, 7]],
+  [-8, -10, [8, 9, 11]],
+  [8, -10, [8, 10, 12]],
 ];
 
 export function createWorld(scene) {
@@ -49,8 +45,6 @@ export function createWorld(scene) {
     color: new THREE.Color('#ff7a1a'), emissive: new THREE.Color('#ff6a00'), emissiveIntensity: 2.2, roughness: 0.6,
   });
 
-  // Wet cobbles: a canvas texture of dark stones with pale mortar, repeated
-  // across the quay, so the floor reads as stone instead of flat brown.
   function cobbleTexture() {
     const c = document.createElement('canvas');
     c.width = 256;
@@ -78,9 +72,6 @@ export function createWorld(scene) {
   }
   const floorMat = new THREE.MeshStandardMaterial({ map: cobbleTexture(), roughness: 0.72, metalness: 0.18 });
 
-  // Big readable site signs: a canvas texture with one giant letter plus the site
-  // name, so the map's identity reads in a single glance (and in a thumbnail).
-  // MeshBasicMaterial stays bright under any light, like a painted sign.
   function signTexture(big, small, bg, fg) {
     const c = document.createElement('canvas');
     c.width = 1024;
@@ -130,36 +121,28 @@ export function createWorld(scene) {
     return mesh;
   }
 
-  // Floor and outer walls (open sky so the low dusk sun reaches the quay).
   box(40.4, 0.4, 30.4, 0, -0.2, 0, floorMat);
   box(0.4, 5, 30.4, -20.2, 2.5, 0, mats.surface);
   box(0.4, 5, 30.4, 20.2, 2.5, 0, mats.surface);
   box(40.4, 5, 0.4, 0, 2.5, -15.2, mats.surface);
   box(40.4, 5, 0.4, 0, 2.5, 15.2, mats.surface);
 
-  // Mid wall at z = -2 with three gaps: west [-16,-13], mid [-2.5,2.5], east [13,16].
   box(4, 4, 0.5, -18, 2, -2, mats.surface);
   box(10.5, 4, 0.5, -7.75, 2, -2, mats.surface);
   box(10.5, 4, 0.5, 7.75, 2, -2, mats.surface);
   box(4, 4, 0.5, 18, 2, -2, mats.surface);
-  // Low wall caps over the mid gap so the lane reads as a doorway.
   box(5.4, 0.8, 0.6, 0, 4.2, -2, mats.hairline);
 
-  // Site A "Lantern Hall" (north-west): the lighthouse keeper's hall, a glowing
-  // lamp room, oil drums and a low platform.
   box(4.6, 3.4, 2.4, -15.5, 1.7, -12.8, rustMat);
   const lampMouth = box(2.4, 1.2, 0.3, -15.5, 1.0, -11.5, glowMat, false);
   lampMouth.castShadow = false;
   cylinder(0.4, 0.4, 5.0, -17.2, 2.5, -13.6, darkMat);
   cylinder(0.4, 0.4, 4.2, -13.2, 2.1, -13.8, darkMat);
-  box(4.8, 0.5, 3.2, -13, 0.25, -7.4, mats.hairline); // low platform (standable)
+  box(4.8, 0.5, 3.2, -13, 0.25, -7.4, mats.hairline);
   box(1.2, 1.1, 1.2, -8.6, 0.55, -11.4, mats.hairline);
-  // Oil drums at the hall door.
   cylinder(0.55, 0.55, 1.1, -10.4, 0.55, -12.6, tealMat);
   cylinder(0.55, 0.55, 1.1, -11.6, 0.55, -13.2, rustMat);
 
-  // Site B "Cannery" (north-east): a cannery block with a chimney, a conveyor
-  // beam and stacked fish crates.
   box(6.4, 4.2, 3.0, 14.5, 2.1, -12.6, mats.surface);
   box(6.8, 0.4, 3.4, 14.5, 4.4, -12.6, darkMat);
   cylinder(0.5, 0.7, 7.5, 18.2, 3.75, -13.4, darkMat);
@@ -168,10 +151,6 @@ export function createWorld(scene) {
   box(1.4, 1.1, 1.4, 11.2, 0.55, -12.8, mats.hairline);
   box(1.4, 1.1, 1.4, 16.8, 0.55, -10.8, tealMat);
 
-  // The Lighthouse: a red-and-white striped tower at the north-west corner,
-  // taller than the walls — the quay's landmark, readable in one look from the
-  // attackers' spawn and straight through the west gap. It stands clear of the
-  // hall, the plant zone's centre and every waypoint. Its lamp sweeps a beam.
   const towerRed = new THREE.MeshStandardMaterial({ color: new THREE.Color('#d63a2f'), roughness: 0.6, metalness: 0.1 });
   const towerWhite = new THREE.MeshStandardMaterial({ color: new THREE.Color('#f5efe4'), roughness: 0.6, metalness: 0.05 });
   const TOWER_X = -17.6;
@@ -193,7 +172,6 @@ export function createWorld(scene) {
   const towerLight = new THREE.PointLight(new THREE.Color('#ffb300'), 40, 30, 1.6);
   towerLight.position.set(TOWER_X, 11, TOWER_Z);
   scene.add(towerLight);
-  // The sweeping beam: a translucent cone + a spotlight, rotating slowly.
   const beamMat = new THREE.MeshBasicMaterial({ color: new THREE.Color('#ffe9a8'), transparent: true, opacity: 0.16, depthWrite: false, side: THREE.DoubleSide });
   const beam = new THREE.Mesh(new THREE.ConeGeometry(3.2, 26, 20, 1, true), beamMat);
   beam.position.set(TOWER_X, 11, TOWER_Z);
@@ -206,15 +184,12 @@ export function createWorld(scene) {
   scene.add(beamSpot, beamSpot.target);
   let beamAngle = -0.6;
 
-  // The beached boat: a fishing hull across the mid lane, its mast the centre
-  // landmark. It breaks the middle sightline without blocking the lanes.
   const hull = box(7.5, 1.8, 2.6, 0, 0.9, 7.2, rustMat);
   hull.rotation.y = 0.12;
   box(7.9, 0.5, 3.0, 0, 1.9, 7.2, darkMat);
   cylinder(0.09, 0.12, 6.5, 0.4, 4.6, 7.2, darkMat, 8);
   box(1.1, 1.0, 1.1, -2.6, 2.2, 7.0, tealMat);
 
-  // Cover: containers and crates on the three lanes.
   box(6, 2.6, 2.4, -10, 1.3, 4.2, tealMat);
   box(6, 2.6, 2.4, 10, 1.3, 4.2, rustMat);
   box(2.4, 2.6, 6, -17.6, 1.3, -6.5, mats.surface);
@@ -226,7 +201,6 @@ export function createWorld(scene) {
   box(1.2, 2.4, 1.2, 0, 1.2, 9.6, mats.hairline);
   box(2.2, 0.9, 1.2, -7, 0.45, -12.4, mats.hairline);
   box(2.2, 0.9, 1.2, 7, 0.45, -12.4, mats.hairline);
-  // Fishing nets and buoys: low crates that read as harbour, not warehouse.
   for (const [bx, bz] of [[-12, 1.5], [12, 1.5], [-5.5, -8.5], [5.5, -8.5]]) {
     box(1.6, 0.7, 1.6, bx, 0.35, bz, darkMat);
   }
@@ -237,7 +211,37 @@ export function createWorld(scene) {
     group.add(buoy);
   }
 
-  // Site markers: painted floor plates so each site reads at a glance.
+  function marketStall(x, z, mat) {
+    box(2.2, 1.05, 1.2, x, 0.53, z, mats.surface);
+    box(2.2, 0.12, 1.2, x, 1.12, z, darkMat);
+    for (const [px, pz] of [[-1, -0.5], [1, -0.5], [-1, 0.5], [1, 0.5]]) {
+      cylinder(0.05, 0.05, 1.1, x + px, 1.7, z + pz, darkMat, 6);
+    }
+    const awning = box(2.5, 0.08, 1.7, x, 2.25, z, mat);
+    awning.rotation.x = 0.16;
+    box(0.9, 0.5, 0.7, x - 0.5, 1.42, z, mats.amber);
+    box(0.7, 0.4, 0.6, x + 0.55, 1.38, z, mats.accent);
+  }
+  const stallRow = [
+    [-12, 13, mats.amber], [-5, 13.2, mats.accent],
+    [5, 13.2, mats.amber], [12, 13, mats.accent],
+  ];
+  for (const [sx, sz, smat] of stallRow) marketStall(sx, sz, smat);
+  const hullB = box(5.2, 1.4, 2.0, -14, 0.7, 11, rustMat);
+  hullB.rotation.y = -0.35;
+  box(5.5, 0.4, 2.3, -14, 1.5, 11, darkMat).rotation.y = -0.35;
+  cylinder(0.08, 0.1, 4.6, -13.2, 3.2, 11, darkMat, 8);
+  for (const [cx, cz] of [[-2.5, 13.4], [2.5, 13.4], [0, 13.6]]) {
+    box(1.1, 1.0, 1.1, cx, 0.5, cz, mats.hairline);
+  }
+  for (const [rx, rz] of [[-8.5, 12.6], [8.5, 12.6]]) {
+    const coil = new THREE.Mesh(new THREE.TorusGeometry(0.42, 0.13, 8, 18), darkMat);
+    coil.position.set(rx, 0.14, rz);
+    coil.rotation.x = -Math.PI / 2;
+    coil.castShadow = true;
+    group.add(coil);
+  }
+
   const plateA = new THREE.Mesh(new THREE.CircleGeometry(4.5, 28), new THREE.MeshBasicMaterial({ color: new THREE.Color(PALETTE.accent), transparent: true, opacity: 0.22 }));
   plateA.rotation.x = -Math.PI / 2;
   plateA.position.set(-13, 0.02, -10);
@@ -247,8 +251,6 @@ export function createWorld(scene) {
   plateB.position.set(13, 0.02, -10);
   group.add(plateB);
 
-  // Giant site signs on the north wall, one per site, plus the quay's own name
-  // on the mid wall facing the attackers' spawn — the map's identity in one look.
   function addSign(texture, w, h, x, y, z, ry = 0) {
     const sign = new THREE.Mesh(
       new THREE.PlaneGeometry(w, h),
@@ -263,7 +265,6 @@ export function createWorld(scene) {
   addSign(signTexture('B', 'CANNERY · SITE B', '#1d130b', '#ffb45e'), 9.5, 2.4, 13, 3.6, -14.9);
   addSign(signTexture('9', 'QUAY 9 — GULLHAVEN', '#3a1e08', '#ffe9c4'), 6.5, 1.6, 0, 3.5, -1.68);
 
-  // Gulls circling the lighthouse: five white V birds on slow orbits.
   const gulls = [];
   const gullMat = new THREE.MeshBasicMaterial({ color: new THREE.Color('#f5efe4'), side: THREE.DoubleSide });
   for (let i = 0; i < 5; i += 1) {
@@ -280,8 +281,6 @@ export function createWorld(scene) {
     gulls.push(bird);
   }
 
-  // Light: a low dusk sun over the harbour, a warm sky fill, and lamps along
-  // the lanes so the quay reads in orange dusk, not darkness.
   const sky = new THREE.HemisphereLight(new THREE.Color('#ffb37a'), new THREE.Color('#4a2c1c'), 2.0);
   scene.add(sky);
   const sun = new THREE.DirectionalLight(new THREE.Color('#ff8c3a'), 4.6);
@@ -305,7 +304,6 @@ export function createWorld(scene) {
   const canneryLight = new THREE.PointLight(new THREE.Color('#39c2d7'), 10, 12, 1.8);
   canneryLight.position.set(14.5, 4.5, -11);
   scene.add(canneryLight);
-  // Lamp posts along the lanes.
   for (const [lx, lz] of [[-10, 2], [10, 2], [-10, -8], [10, -8]]) {
     cylinder(0.07, 0.09, 3.4, lx, 1.7, lz, darkMat, 8);
     const lamp = new THREE.Mesh(
@@ -347,13 +345,11 @@ export function createWorld(scene) {
         new THREE.Vector3(7, 0, -12.5),
       ],
     },
-    // The beam sweeps and the gulls circle: ambient motion, one call per frame.
     step(dt, t) {
       beamAngle += dt * 0.25;
       const bx = TOWER_X + Math.cos(beamAngle) * 20;
       const bz = TOWER_Z + Math.sin(beamAngle) * 20;
       beamSpot.target.position.set(bx, 0, bz);
-      // The cone's long axis is +Y: aim it from the lamp toward the sweep point.
       beamDir.set(bx - TOWER_X, -11, bz - TOWER_Z).normalize();
       beam.quaternion.setFromUnitVectors(beamUp, beamDir);
       beam.position.set(TOWER_X + beamDir.x * 13, 11 + beamDir.y * 13, TOWER_Z + beamDir.z * 13);

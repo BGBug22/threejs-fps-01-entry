@@ -127,6 +127,29 @@ export function createFx(scene) {
     flareLight.intensity = 160;
   }
 
+  // Glare pop: a white sphere + white light that spikes and dies in under a
+  // second. Same shape as the flare's burst, opposite character: the flare
+  // hangs and warms the lane, the glare is a camera flash — gone before the
+  // bots finish blinking, which is the point.
+  const glareBall = new THREE.Mesh(
+    new THREE.SphereGeometry(0.9, 14, 10),
+    new THREE.MeshBasicMaterial({ color: new THREE.Color('#ffffff'), transparent: true, opacity: 0, depthWrite: false }),
+  );
+  glareBall.visible = false;
+  scene.add(glareBall);
+  const glareLight = new THREE.PointLight(new THREE.Color('#ffffff'), 0, 26, 1.6);
+  scene.add(glareLight);
+  let glareLife = 0;
+
+  function glareBurst(pos) {
+    glareBall.position.copy(pos);
+    glareBall.position.y = Math.max(1.4, pos.y + 0.6);
+    glareBall.visible = true;
+    glareLife = 0.9;
+    glareLight.position.copy(glareBall.position);
+    glareLight.intensity = 220;
+  }
+
   function smoke(pos) {
     const cloud = smokes[smokeCursor];
     smokeCursor = (smokeCursor + 1) % SMOKE_POOL;
@@ -261,6 +284,15 @@ export function createFx(scene) {
       flareLight.intensity = 160 * k;
       if (flareLife <= 0) { flareBall.visible = false; flareLight.intensity = 0; }
     }
+    // The glare burns out in 0.9 s and shrinks as it fades — a flash, not a fire.
+    if (glareLife > 0) {
+      glareLife -= dt;
+      const k = Math.max(0, glareLife) / 0.9;
+      glareBall.material.opacity = 0.95 * k;
+      glareBall.scale.setScalar(1 + (1 - k) * 1.5);
+      glareLight.intensity = 220 * k;
+      if (glareLife <= 0) { glareBall.visible = false; glareLight.intensity = 0; }
+    }
     // Molotov flames flicker and shrink as the pool burns out.
     for (const f of fires) {
       if (f.life <= 0) continue;
@@ -283,6 +315,7 @@ export function createFx(scene) {
     smoke,
     smokeBlocks,
     flareBurst,
+    glareBurst,
     fire,
     fireZones() { return fires.filter((f) => f.life > 0); },
     step,

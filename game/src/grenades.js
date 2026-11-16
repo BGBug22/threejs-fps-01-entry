@@ -1,11 +1,13 @@
-// Grenades: frag, smoke, flare and molotov — the piece the old entries were missing
-// (judge criterion 3 asks for at least one grenade, and the winners carry four).
-// The player throws with 4/5/6/7 and buys them in the requisition menu; one Gull bot
-// per round carries a smoke for the site push, one Keeper carries a flare to blind the
-// push, and one Keeper carries a Molotov to deny it. A thrown grenade is a small
-// bouncing ball with a fuse: frag explodes with radius damage, smoke blooms a cloud
-// that blocks sight for 12 s, flare pops bright orange and blinds anyone facing it
-// for 3 s, molotov leaves a burning pool that hurts anyone standing in it for 6 s.
+// Grenades: frag, smoke, flare, molotov and glare — five tools, one per key.
+// A thrown grenade is a small bouncing ball with a fuse: frag explodes with
+// radius damage, smoke blooms a cloud that blocks sight for 12 s, flare pops
+// bright orange and blinds anyone facing it for 3 s, molotov leaves a burning
+// pool that hurts anyone standing in it for 6 s, and glare is the fast white
+// flashbang: instant white-out for 1.5 s, no hanging light, for clearing a
+// corner before the push. The player throws with 4/5/6/7/8 and buys them in
+// the requisition menu; one Gull bot per round carries a smoke for the site
+// push, one Keeper carries a flare to blind the push, and one Keeper carries
+// a Molotov to deny it.
 import * as THREE from 'three';
 
 export const GRENADES = {
@@ -13,6 +15,7 @@ export const GRENADES = {
   smoke: { id: 'smoke', name: 'Smoke Grenade', price: 300, key: '5', blurb: 'A grey cloud that blocks sight for 12 s.' },
   flare: { id: 'flare', name: 'Flare', price: 250, key: '6', blurb: 'Blinds whoever faces it for 3 s.' },
   molotov: { id: 'molotov', name: 'Molotov', price: 300, key: '7', blurb: 'Fire pool. 25 damage per second for 6 s.' },
+  glare: { id: 'glare', name: 'Glare Grenade', price: 350, key: '8', blurb: 'White flash. Blinds and rings ears for 1.5 s.' },
 };
 
 const GRAVITY = 14;
@@ -30,9 +33,10 @@ export function createGrenades(scene, colliders, fx) {
     smoke: new THREE.MeshStandardMaterial({ color: new THREE.Color('#9aa5a0'), roughness: 0.6, metalness: 0.2 }),
     flare: new THREE.MeshStandardMaterial({ color: new THREE.Color('#ff5a1a'), roughness: 0.35, metalness: 0.2, emissive: new THREE.Color('#a83208'), emissiveIntensity: 1.2 }),
     molotov: new THREE.MeshStandardMaterial({ color: new THREE.Color('#a8321f'), roughness: 0.35, metalness: 0.15, emissive: new THREE.Color('#571505'), emissiveIntensity: 0.6 }),
+    glare: new THREE.MeshStandardMaterial({ color: new THREE.Color('#f2f5e8'), roughness: 0.3, metalness: 0.1, emissive: new THREE.Color('#c8cdb2'), emissiveIntensity: 0.9 }),
   };
   const probe = new THREE.Box3();
-  const inventory = { frag: 0, smoke: 1, flare: 1, molotov: 0 };
+  const inventory = { frag: 0, smoke: 1, flare: 1, molotov: 0, glare: 0 };
   // One bot smoke, one bot flare and one bot Molotov per round, never the player's stock.
   const botBudget = { smoke: 1, flare: 1, molotov: 1 };
   const active = [];
@@ -55,7 +59,7 @@ export function createGrenades(scene, colliders, fx) {
     scene.add(mesh);
     const vel = dir.clone().normalize().multiplyScalar(THROW_SPEED);
     vel.y += 4.5;
-    const fuse = type === 'flare' ? 1.1 : type === 'flash' ? 1.3 : 2.2;
+    const fuse = type === 'flare' ? 1.1 : type === 'glare' ? 1.3 : type === 'flash' ? 1.3 : 2.2;
     active.push({ type, mesh, vel, fuse, bounced: false, thrower });
     return true;
   }
@@ -84,6 +88,15 @@ export function createGrenades(scene, colliders, fx) {
       ctx.sound('explosion');
       ctx.noise(pos, 'explosion', 20);
       fires.push({ pos, life: FIRE_LIFE, thrower: g.thrower });
+    } else if (g.type === 'glare') {
+      // Glare: the fast flashbang. A white burst that whites out the room
+      // for a heartbeat — shorter than the flare's hanging burn, but instant,
+      // so it clears a corner the moment it pops. Same blind call, half the
+      // duration, and a sharp crack instead of the flare's hiss.
+      fx.glareBurst(pos);
+      ctx.sound('glare');
+      ctx.noise(pos, 'glare', 18);
+      ctx.blind(pos, 1.5);
     } else {
       // Flare: a bright orange burst that hangs in the air and blinds whoever
       // faces it — longer than a flashbang, and it lights the lane while it burns.
@@ -97,7 +110,7 @@ export function createGrenades(scene, colliders, fx) {
   return {
     inventory,
     counts() {
-      return { frag: inventory.frag, smoke: inventory.smoke, flare: inventory.flare, molotov: inventory.molotov };
+      return { frag: inventory.frag, smoke: inventory.smoke, flare: inventory.flare, molotov: inventory.molotov, glare: inventory.glare };
     },
     reset() {
       for (const g of active) scene.remove(g.mesh);
@@ -108,6 +121,7 @@ export function createGrenades(scene, colliders, fx) {
       inventory.smoke = 1;
       inventory.flare = 1;
       inventory.molotov = 0;
+      inventory.glare = 0;
       botBudget.smoke = 1;
       botBudget.flare = 1;
       botBudget.molotov = 1;
@@ -155,6 +169,7 @@ export function createGrenades(scene, colliders, fx) {
             if (g.type === 'frag') g.fuse = Math.min(g.fuse, 0.6);
             if (g.type === 'smoke') g.fuse = Math.min(g.fuse, 0.5);
             if (g.type === 'flare') g.fuse = Math.min(g.fuse, 0.4);
+            if (g.type === 'glare') g.fuse = Math.min(g.fuse, 0.4);
           }
         }
         if (g.fuse <= 0) {

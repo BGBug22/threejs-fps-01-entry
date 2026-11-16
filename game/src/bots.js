@@ -1,11 +1,6 @@
-// The nine bots: four Gull friendlies and five Keeper enemies. Each bot walks the
-// waypoint graph, holds or pushes a site, and fights with the same hitscan rules as
-// the player. All randomness comes from the rng main.js passes in, so a seeded run
-// replays the same.
-//
-// DECISIVE BY DESIGN: the carrier rushes the nearest site from the first second,
-// escorts go with them, and a round still unplanted at 40 s turns into an all-out
-// push — no camping, no stalling, no timeout draws. Every round ends with a winner.
+// GULLHAVEN bots: named soldiers (Gulls vs Keepers) that rush one site, plant,
+// rotate to the planted site, hear shots and call them on the radio by lane
+// name. Veterans (Flint, Kitt) aim tighter than the rest.
 import * as THREE from 'three';
 import { PALETTE } from './palette.js';
 import { WEAPONS } from './weapons.js';
@@ -39,8 +34,6 @@ function nearestNode(waypoints, pos) {
   return best;
 }
 
-// Short lane names for the radio: "West Quay", "Mid", "East Quay" — the same words
-// the winners' callouts use, so a callout tells the player where the sound was.
 function locationName(pos) {
   const dA = Math.hypot(pos.x + 13, pos.z + 10);
   const dB = Math.hypot(pos.x - 13, pos.z + 10);
@@ -75,14 +68,11 @@ function findPath(waypoints, from, to) {
 export function createBots(scene, world) {
   const list = [];
   const hitMeshes = [];
-  let tookCharge = false; // one Gull per round may take the charge from a stalling player
+  let tookCharge = false;
   const probe = new THREE.Box3();
   const tmpV = new THREE.Vector3();
   const tmpDir = new THREE.Vector3();
 
-  // Nameplate + health bar: one canvas sprite per bot, name on top in the team
-  // colour, bar below. Winners show nameplates; a bot you can name is a bot
-  // you can read at a glance.
   function makeHealthBar(name, team) {
     const canvas = document.createElement('canvas');
     canvas.width = 128;
@@ -110,9 +100,6 @@ export function createBots(scene, world) {
     texture.needsUpdate = true;
   }
 
-  // A readable humanoid, not a plain box: torso in the team colour, head with a
-  // bright visor stripe, helmet, arms holding the gun, legs and a backpack.
-  // Gulls are sea blue, Keepers are lantern amber — the two teams never blend.
   function buildBotMesh(team) {
     const teamColor = team === 'gull' ? PALETTE.accent : PALETTE.amber;
     const group = new THREE.Group();
@@ -183,7 +170,6 @@ export function createBots(scene, world) {
     tmpDir.divideScalar(dist);
     const hit = ctx.raycast(from, tmpDir, dist - 0.2, bot);
     if (hit) return false;
-    // A live smoke cloud between the eyes blocks sight (never bullets).
     if (ctx.smokeBlocks && ctx.smokeBlocks(from, to)) return false;
     return true;
   }
@@ -204,9 +190,6 @@ export function createBots(scene, world) {
     for (const bot of list) scene.remove(bot.group);
     list.length = 0;
     hitMeshes.length = 0;
-    // Halftime switch: whichever team attacks spawns south and pushes the
-    // sites; the other spawns north and holds them. Slot 0 of each spawn row
-    // belongs to the player, so the 4-bot side takes slots 1-4, the 5-bot side 0-4.
     const gullSpawns = attackTeam === 'gull' ? world.spawns.attack : world.spawns.defend;
     const keeperSpawns = attackTeam === 'keeper' ? world.spawns.attack : world.spawns.defend;
     const mk = (team, name, index, spawnPos, yaw, sniper) => {
@@ -228,18 +211,13 @@ export function createBots(scene, world) {
         speed: 3.6, plantProgress: 0, defuseProgress: 0, alive: true, carrier: false,
         fallT: 0, scanAt: rng() * 0.15, siteNode: 0,
         laneOffset: (index - (team === 'gull' ? 1.5 : 2)) * 0.9,
-        // Hearing + radio: a bot that hears a shot turns toward it, walks over to
-        // look, and says so on the radio (throttled, so the log never floods).
         heardPos: new THREE.Vector3(), heardUntil: 0, lastHearCall: -99,
         lastContactCall: -99, blindedUntil: 0,
         smokeReady: team === attackTeam && index === 0,
-        // One flare per round: the defending site holder blinds the push with
-        // it when the attackers close in on his site.
         flareReady: team !== attackTeam && index === 0,
-        // One Molotov per round: the defending site holder denies the push
-        // with fire when the attackers close in on his site.
         molotovReady: team !== attackTeam && index === 1,
         stallCalled: false,
+        skill: name === 'Flint' ? 0.7 : name === 'Kitt' ? 0.85 : 1,
       };
       torso.userData.bot = bot;
       torso.userData.part = 'torso';
@@ -256,9 +234,6 @@ export function createBots(scene, world) {
     for (let i = 0; i < 5; i += 1) {
       mk('keeper', KEEPER_NAMES[i], i, keeperSpawns[i], attackTeam === 'keeper' ? 0 : Math.PI, attackTeam !== 'keeper' && i === 4 && round >= 3);
     }
-    // Attackers rush ONE site together (carrier + escorts), one lurker fakes the
-    // other site; defenders hold 2A · 2B · 1 mid. The rush site is the one
-    // nearest the attackers' spawn row — the plant happens in seconds, not minutes.
     const rushSite = rng() < 0.5 ? 'A' : 'B';
     for (const team of ['gull', 'keeper']) {
       const n = list.filter((b) => b.team === team).length;
@@ -267,11 +242,6 @@ export function createBots(scene, world) {
         else b.goalSite = i === n - 1 ? 'A' : (i % 2 === 0 ? 'A' : 'B');
       });
     }
-    // The charge itself starts with the player (or with the first Keeper after
-    // halftime — main.js assigns that). No bot is pre-marked carrier: a bot only
-    // becomes carrier by fetching a dropped charge or by taking it from a
-    // stalling player, so the plant logic can never fire for a charge the bot
-    // does not actually hold.
     return { rushSite };
   }
 
@@ -302,8 +272,6 @@ export function createBots(scene, world) {
       }
       if (ctx.phase !== 'live') continue;
 
-      // A flared bot stands blind: no sight, no shots, no new orders until the
-      // glare clears. The radio still works — a blinded bot says so.
       if (ctx.time < bot.blindedUntil) {
         if (!bot.blindCalled) {
           bot.blindCalled = true;
@@ -314,14 +282,12 @@ export function createBots(scene, world) {
       }
       bot.blindCalled = false;
 
-      // Hurt and outnumbered: call for backup, once per round.
       if (bot.health < 35 && !bot.backupCalled && ctx.time - (bot.lastBackupCall || -99) > 8) {
         bot.backupCalled = true;
         bot.lastBackupCall = ctx.time;
         if (ctx.radio) ctx.radio(`${bot.name}: Need backup at ${locationName(bot.pos)} — I'm hurt!`, bot.team);
       }
 
-      // --- perception, staggered ---
       bot.scanAt -= dt;
       if (bot.scanAt <= 0) {
         bot.scanAt = 0.15 + rng() * 0.1;
@@ -330,17 +296,12 @@ export function createBots(scene, world) {
 
       if (charge.state === 'planted') bot.goalSite = charge.site;
 
-      // --- anti-stall: 40 s without a plant turns the whole attacking team
-      // into one push on the other site. Set once per bot — never flip-flop.
-      // Rounds end with a winner, never a clock.
       if (bot.team === ctx.attackTeam && charge.state !== 'planted' && ctx.roundAge > STALL_AT && !bot.stallCalled) {
         bot.stallCalled = true;
         bot.goalSite = bot.goalSite === 'A' ? 'B' : 'A';
         if (ctx.radio) ctx.radio(`${bot.name}: PUSH NOW — no more waiting, all on ${bot.goalSite}!`, bot.team);
       }
 
-      // --- take the charge from a stalling player: if the player still holds
-      // it at 40 s, the nearest Gull runs over, takes it, and sprints to plant.
       if (bot.team === ctx.attackTeam && charge.state === 'carried' && charge.carrier === 'player' && ctx.roundAge > STALL_AT && !tookCharge) {
         const dPlayer = Math.hypot(bot.pos.x - ctx.playerPos.x, bot.pos.z - ctx.playerPos.z);
         if (dPlayer < 1.6) {
@@ -355,7 +316,6 @@ export function createBots(scene, world) {
         }
       }
 
-      // --- plant / defuse ---
       if (bot.carrier && bot.team === ctx.attackTeam && charge.state === 'carried' && charge.carrier === bot) {
         const site = world.sites[bot.goalSite];
         const dSite = Math.hypot(bot.pos.x - site.center.x, bot.pos.z - site.center.z);
@@ -364,6 +324,8 @@ export function createBots(scene, world) {
           if (bot.plantProgress === 0 && ctx.radio && !bot.plantCalled) {
             bot.plantCalled = true;
             ctx.radio(`${bot.name}: Planting the Tide Charge at ${bot.goalSite} — cover me!`, bot.team);
+            const mate = list.find((b) => b.team === bot.team && b.alive && b !== bot);
+            if (mate && ctx.radio) ctx.radio(`${mate.name}: On you — holding ${bot.goalSite}!`, bot.team);
           }
           bot.plantProgress += dt / 3.5;
           if (bot.plantProgress >= 1) { bot.plantProgress = 0; bot.plantCalled = false; ctx.onPlanted(bot.goalSite, bot); }
@@ -379,6 +341,8 @@ export function createBots(scene, world) {
           if (bot.defuseProgress === 0 && ctx.radio && !bot.defuseCalled) {
             bot.defuseCalled = true;
             ctx.radio(`${bot.name}: Defusing the charge — hold them off!`, bot.team);
+            const mate = list.find((b) => b.team === bot.team && b.alive && b !== bot);
+            if (mate && ctx.radio) ctx.radio(`${mate.name}: Covering you — eyes on the site!`, bot.team);
           }
           bot.defuseProgress += dt / 5;
           if (bot.defuseProgress >= 1) { bot.defuseProgress = 0; bot.defuseCalled = false; ctx.onDefused(bot); }
@@ -387,7 +351,6 @@ export function createBots(scene, world) {
         bot.defuseProgress = 0;
         bot.defuseCalled = false;
       }
-      // --- fetch a dropped charge (attackers only) ---
       if (bot.team === ctx.attackTeam && charge.state === 'dropped' && !bot.carrier) {
         const dCharge = Math.hypot(bot.pos.x - charge.pos.x, bot.pos.z - charge.pos.z);
         if (dCharge < 1.4) {
@@ -401,7 +364,6 @@ export function createBots(scene, world) {
         }
       }
 
-      // --- combat ---
       if (bot.target) {
         const t = bot.target;
         const tPos = t.kind === 'player' ? ctx.playerPos : t.bot.pos;
@@ -421,7 +383,6 @@ export function createBots(scene, world) {
               bot.burstLeft = 3 + Math.floor(rng() * 3);
             }
           }
-          // strafe while engaging
           if (ctx.time > bot.strafeUntil) {
             bot.strafeDir = rng() < 0.5 ? -1 : 1;
             bot.strafeUntil = ctx.time + 0.7 + rng() * 0.7;
@@ -433,9 +394,7 @@ export function createBots(scene, world) {
         }
       }
 
-      // --- movement ---
       if (bot.team === ctx.attackTeam) {
-        // One smoke per round: the lead bot screens the site push with it.
         if (bot.smokeReady && !bot.target) {
           const site = world.sites[bot.goalSite];
           const dSite = Math.hypot(bot.pos.x - site.center.x, bot.pos.z - site.center.z);
@@ -447,7 +406,6 @@ export function createBots(scene, world) {
             }
           }
         }
-        // Heard a shot and no enemy in sight: walk over and look.
         if (!bot.target && ctx.time < bot.heardUntil) {
           const dHeard = Math.hypot(bot.pos.x - bot.heardPos.x, bot.pos.z - bot.heardPos.z);
           if (dHeard > 1.5) {
@@ -457,15 +415,12 @@ export function createBots(scene, world) {
           }
           bot.heardUntil = 0;
         }
-        // The carrier sprints; the escorts keep up. Nobody strolls to a site.
         const site = world.sites[bot.goalSite];
         const rush = bot.carrier || ctx.roundAge > STALL_AT;
         walkTo(bot, site.center.x, site.center.z, dt, rush ? 4.4 : bot.speed);
         if (Math.hypot(bot.pos.x - site.center.x, bot.pos.z - site.center.z) < 2.2) bot.state = 'hold';
         else bot.state = 'push';
       } else {
-        // One flare per round: Flint blinds the site push when the attackers
-        // close in on his site — the flare is the Keeper's answer to the rush.
         if (bot.flareReady && !bot.target) {
           const site = world.sites[bot.goalSite];
           let nearest = null;
@@ -484,8 +439,6 @@ export function createBots(scene, world) {
             }
           }
         }
-        // One Molotov per round: Brine denies the site push with fire when an
-        // attacker closes in on his site.
         if (bot.molotovReady && !bot.target) {
           const site = world.sites[bot.goalSite];
           let nearest = null;
@@ -504,7 +457,6 @@ export function createBots(scene, world) {
             }
           }
         }
-        // defenders hold near their site, or rotate to the planted site at a run
         const goal = charge.state === 'planted' ? world.sites[charge.site].center : world.sites[bot.goalSite].center;
         const d = Math.hypot(bot.pos.x - goal.x, bot.pos.z - goal.z);
         if (d > 3.5) {
@@ -534,8 +486,6 @@ export function createBots(scene, world) {
       else { dest = node.p; break; }
     }
     if (!dest) dest = tmpV.set(x, 0, z);
-    // Each bot walks a line parallel to the path, offset sideways, so the squad
-    // advances abreast instead of stacking up and blocking each other's fire.
     const dx0 = dest.x - bot.pos.x;
     const dz0 = dest.z - bot.pos.z;
     const len0 = Math.hypot(dx0, dz0) || 1;
@@ -553,13 +503,12 @@ export function createBots(scene, world) {
   function scanForEnemy(bot, ctx) {
     const eye = botEye(bot);
     const candidates = [];
-    // The player is a Gull: only Keeper bots count them as an enemy.
     if (ctx.playerAlive && bot.team === 'keeper') candidates.push({ kind: 'player', pos: ctx.playerPos, bot: null });
     for (const other of list) {
       if (other.team !== bot.team && other.alive) candidates.push({ kind: 'bot', pos: other.pos, bot: other });
     }
     let best = null;
-    let bestD = 22; // only fight inside 22 m: further away, keep pushing instead of stalling in a long-range duel through a gap
+    let bestD = 22;
     for (const c of candidates) {
       const d = Math.hypot(c.pos.x - bot.pos.x, c.pos.z - bot.pos.z);
       if (d > bestD) continue;
@@ -569,7 +518,6 @@ export function createBots(scene, world) {
     if (best) {
       if (!bot.target) {
         bot.reactionAt = ctx.time + 0.35 + ctx.rng() * 0.4;
-        // First sight of an enemy goes on the radio, throttled per bot.
         if (ctx.radio && ctx.time - bot.lastContactCall > 5) {
           bot.lastContactCall = ctx.time;
           const where = locationName(best.pos);
@@ -597,7 +545,7 @@ export function createBots(scene, world) {
     const tPos = t.kind === 'player' ? ctx.playerPos : t.bot.pos;
     const headshot = ctx.rng() < 0.14;
     const aimY = tPos.y + (headshot ? 1.56 : CHEST);
-    const spread = 0.006 + dist * 0.0009;
+    const spread = (0.006 + dist * 0.0009) * bot.skill;
     const dir = new THREE.Vector3(
       tPos.x - eye.x + (ctx.rng() * 2 - 1) * spread * dist,
       aimY - eye.y + (ctx.rng() * 2 - 1) * spread * dist,
@@ -640,8 +588,6 @@ export function createBots(scene, world) {
     return false;
   }
 
-  // Hearing: a shot or an explosion reaches every bot inside its radius. The
-  // bot turns toward the sound, walks over to look, and says so on the radio.
   function hearNoise(ctx, pos, kind, radius, shooter) {
     let called = 0;
     for (const bot of list) {
@@ -654,14 +600,12 @@ export function createBots(scene, world) {
       if (ctx.radio && ctx.time - bot.lastHearCall > 4 && called < 2) {
         bot.lastHearCall = ctx.time;
         called += 1;
-        const what = kind === 'explosion' ? 'Heard explosion' : kind === 'flare' ? 'Heard a flare' : 'Heard shots';
+        const what = kind === 'explosion' ? 'Heard explosion' : kind === 'flare' ? 'Heard a flare' : kind === 'glare' ? 'Saw a glare' : 'Heard shots';
         ctx.radio(`${bot.name}: ${what}, ${locationName(pos)}`, bot.team);
       }
     }
   }
 
-  // Flare blindness: bots facing the pop, inside 24 m with a clear line, lose
-  // their sight for the flare's duration.
   function blind(ctx, pos, seconds = 3.0) {
     for (const bot of list) {
       if (!bot.alive) continue;
@@ -677,9 +621,6 @@ export function createBots(scene, world) {
     }
   }
 
-  // The round plan, printed in the HUD so the player (and the judge) can see
-  // the team is playing a plan, not wandering. 'attack' is the player's plan
-  // while Gulls attack; 'defend' is the plan after the halftime switch.
   function getPlan(role) {
     return role === 'attack'
       ? 'PLAN: RUSH A — YOU: ENTRY A'

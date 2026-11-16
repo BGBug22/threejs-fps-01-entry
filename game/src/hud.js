@@ -11,6 +11,13 @@ export function createHud() {
     copy: $('overlay-copy'),
     stats: $('overlay-stats'),
     play: $('play'),
+    settingsBtn: $('settings-btn'),
+    settingsPanel: $('settings-panel'),
+    sensSlider: $('sens-slider'),
+    sensValue: $('sens-value'),
+    volSlider: $('vol-slider'),
+    volValue: $('vol-value'),
+    settingsClose: $('settings-close'),
     ammoMag: $('ammo-mag'),
     ammoReserve: $('ammo-reserve'),
     ammo: $('ammo'),
@@ -149,7 +156,7 @@ export function createHud() {
       els.planLine.textContent = text;
     },
     setGrenades(counts, hasKit) {
-      const text = `4 FRAG ${counts.frag} · 5 SMOKE ${counts.smoke} · 6 FLARE ${counts.flare} · 7 MOLOTOV ${counts.molotov}${hasKit ? ' · KIT ✓' : ''}`;
+      const text = `4 FRAG ${counts.frag} · 5 SMOKE ${counts.smoke} · 6 FLARE ${counts.flare} · 7 MOLOTOV ${counts.molotov} · 8 GLARE ${counts.glare}${hasKit ? ' · KIT ✓' : ''}`;
       if (text === last.grenades) return;
       last.grenades = text;
       els.grenades.textContent = text;
@@ -215,7 +222,7 @@ export function createHud() {
     setBombStatus(text) {
       els.bombStatus.textContent = text;
     },
-    killfeed(killer, victim, headshot, killerTeam) {
+    killfeed(killer, victim, headshot, killerTeam, weapon = '') {
       const row = document.createElement('div');
       row.className = 'feed-row';
       const k = document.createElement('span');
@@ -225,6 +232,14 @@ export function createHud() {
       v.className = victim === 'You' ? 'feed-gull' : 'feed-keeper';
       v.textContent = victim;
       row.append(k, document.createTextNode(headshot ? ' ☠ ' : ' ✕ '), v);
+      // The weapon tag names the gun that did it — a killfeed that only
+      // names people hides the loadout story the match is telling.
+      if (weapon) {
+        const w = document.createElement('span');
+        w.className = 'feed-weapon';
+        w.textContent = ` [${weapon}]`;
+        row.append(w);
+      }
       els.killfeed.prepend(row);
       while (els.killfeed.children.length > 5) els.killfeed.lastChild.remove();
       // 12 s, not 7: on a slow machine the staged cover's sim loop alone
@@ -330,7 +345,10 @@ export function createHud() {
       els.title.textContent = (stats && mode === 'end') ? stats.result : text.title;
       els.copy.textContent = text.copy;
       if (stats && mode === 'end') {
-        els.stats.textContent = `You: ${stats.kills} kills · ${stats.deaths} deaths · $${stats.earned.toLocaleString()} earned — MVP: ${stats.mvp}`;
+        const acc = stats.accuracy ?? 0;
+        const hs = stats.headshots ?? 0;
+        const dmg = stats.damage ?? 0;
+        els.stats.textContent = `You: ${stats.kills} kills · ${stats.deaths} deaths · $${stats.earned.toLocaleString()} earned — MVP: ${stats.mvp} · ${acc}% accuracy · ${hs} headshots · ${dmg.toLocaleString()} damage`;
         show(els.stats);
       } else {
         hide(els.stats);
@@ -341,5 +359,34 @@ export function createHud() {
     hideOverlay() { hide(els.overlay); },
     onPlay(handler) { els.play.addEventListener('click', handler); },
     onBuy(handler) { this._onBuy = handler; },
+    // Settings: mouse sensitivity and master volume, on the start and pause
+    // overlays. The sliders report live, so a player can feel the sensitivity
+    // change before the match starts; the values are applied by main.js.
+    onSettings(handler) { if (els.settingsBtn) els.settingsBtn.addEventListener('click', handler); },
+    openSettings(current, onChange) {
+      if (!els.settingsPanel) return;
+      if (els.sensSlider) {
+        els.sensSlider.value = String(current.sensitivity);
+        if (els.sensValue) els.sensValue.textContent = `${Number(current.sensitivity).toFixed(2)}×`;
+      }
+      if (els.volSlider) {
+        els.volSlider.value = String(current.volume);
+        if (els.volValue) els.volValue.textContent = `${Math.round(current.volume * 100)}%`;
+      }
+      const read = () => {
+        const s = {
+          sensitivity: els.sensSlider ? Number(els.sensSlider.value) : current.sensitivity,
+          volume: els.volSlider ? Number(els.volSlider.value) : current.volume,
+        };
+        if (els.sensValue) els.sensValue.textContent = `${s.sensitivity.toFixed(2)}×`;
+        if (els.volValue) els.volValue.textContent = `${Math.round(s.volume * 100)}%`;
+        onChange(s);
+      };
+      if (els.sensSlider) els.sensSlider.oninput = read;
+      if (els.volSlider) els.volSlider.oninput = read;
+      if (els.settingsClose) els.settingsClose.onclick = () => hide(els.settingsPanel);
+      show(els.settingsPanel);
+    },
+    closeSettings() { if (els.settingsPanel) hide(els.settingsPanel); },
   };
 }

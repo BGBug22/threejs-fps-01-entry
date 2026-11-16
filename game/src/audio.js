@@ -5,6 +5,13 @@ export function createAudio() {
   let ctx = null;
   let master = null;
   let muted = false;
+  let volume = 1;
+
+  // Master volume, 0-1, applied on top of the 0.32 base level the mix was
+  // tuned at. The settings panel drives it; the game never touches it.
+  function applyVolume() {
+    if (master) master.gain.value = 0.32 * volume;
+  }
 
   function ensure() {
     if (ctx) return ctx;
@@ -75,6 +82,11 @@ export function createAudio() {
   return {
     resume() { const c = ensure(); if (c && c.state === 'suspended') c.resume().catch(() => {}); },
     setMuted(value) { muted = value; },
+    setVolume(value) {
+      volume = Math.max(0, Math.min(1, value));
+      applyVolume();
+    },
+    get volume() { return volume; },
     get muted() { return muted; },
     shot(kind) {
       if (kind === 'albatross') burst({ duration: 0.3, frequency: 900, gain: 0.85, slideTo: 90 });
@@ -127,6 +139,13 @@ export function createAudio() {
     flare() {
       burst({ duration: 0.9, frequency: 600, type: 'bandpass', gain: 0.5, slideTo: 4200 });
       tone({ frequency: 1900, duration: 0.5, type: 'sine', gain: 0.1, slideTo: 2600 });
+    },
+    // Glare: a sharp crack and a high ring that fades — the flashbang's
+    // signature is the ring, not the pop, so the tone outlasts the burst.
+    glare() {
+      burst({ duration: 0.06, frequency: 4000, gain: 0.8, slideTo: 1200 });
+      tone({ frequency: 3200, duration: 0.7, type: 'sine', gain: 0.12, slideTo: 2400 });
+      tone({ frequency: 4100, duration: 0.5, type: 'sine', gain: 0.07, slideTo: 3600, delay: 0.05 });
     },
     // Distant gulls over the harbour, two cries a fifth apart.
     gulls() {
