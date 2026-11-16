@@ -188,11 +188,11 @@ function siteAt(pos) {
 }
 
 function updateScoreboard() {
-  const gullRows = [['You', player.state.alive]];
-  for (const b of bots.list) if (b.team === 'gull') gullRows.push([b.name, b.alive]);
-  const keeperRows = bots.list.filter((b) => b.team === 'keeper').map((b) => [b.name, b.alive]);
+  const gullRows = [['You', player.state.alive, match.kills]];
+  for (const b of bots.list) if (b.team === 'gull') gullRows.push([b.name, b.alive, match.botKills[b.name] || 0]);
+  const keeperRows = bots.list.filter((b) => b.team === 'keeper').map((b) => [b.name, b.alive, match.botKills[b.name] || 0]);
   const fill = (el, rows) => {
-    el.innerHTML = rows.map(([n, a]) => `<div class="sb-row${a ? '' : ' dead'}"><span>${n}</span><span>${a ? 'ALIVE' : 'DOWN'}</span></div>`).join('');
+    el.innerHTML = rows.map(([n, a, k]) => `<div class="sb-row${a ? '' : ' dead'}"><span>${n}</span><span>${k} K · ${a ? 'ALIVE' : 'DOWN'}</span></div>`).join('');
   };
   fill(document.getElementById('sb-gull'), gullRows);
   fill(document.getElementById('sb-keeper'), keeperRows);
@@ -453,6 +453,13 @@ function endRound(winner, reason) {
   match.lastIncome = `${winner === 'gull' ? 'Round won' : 'Round lost'} +$${reward} · ${match.roundKills} kill${match.roundKills === 1 ? '' : 's'} +$${match.roundKills * KILL_REWARD}`;
   hud.setScore(match.gull, match.keeper, match.round);
   hud.setMoney(match.money);
+  let topName = 'You';
+  let topK = match.kills;
+  for (const [name, k] of Object.entries(match.botKills)) {
+    if (k > topK) { topK = k; topName = name; }
+  }
+  const topBot = bots.list.find((b) => b.name === topName);
+  hud.radio(`Top fragger: ${topName} — ${topK} kill${topK === 1 ? '' : 's'}`, topBot ? topBot.team : 'gull');
   hud.banner(winner === 'gull' ? 'GULLS WIN THE ROUND' : 'KEEPERS WIN THE ROUND', reason, 3600);
   sound(winner === 'gull' ? 'roundWin' : 'roundLose');
   hud.plantProgress(null);
@@ -842,6 +849,7 @@ function fixedStep(dt) {
       hud.banner(audio.muted ? 'SOUND OFF' : 'SOUND ON', '', 1200);
     }
     if (pressed('KeyX') && phase === 'live' && player.state.alive) sendCallout();
+    if (pressed('KeyV') && phase === 'live' && player.state.alive) weaponView.inspect();
 
     bots.step(dt, ctx);
     grenades.step(dt, ctx);

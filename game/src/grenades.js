@@ -28,17 +28,17 @@ export function createGrenades(scene, colliders, fx) {
     molotov: new THREE.MeshStandardMaterial({ color: new THREE.Color('#a8321f'), roughness: 0.35, metalness: 0.15, emissive: new THREE.Color('#571505'), emissiveIntensity: 0.6 }),
     glare: new THREE.MeshStandardMaterial({ color: new THREE.Color('#f2f5e8'), roughness: 0.3, metalness: 0.1, emissive: new THREE.Color('#c8cdb2'), emissiveIntensity: 0.9 }),
   };
-  const probe = new THREE.Box3();
-  const inventory = { frag: 0, smoke: 1, flare: 1, molotov: 0, glare: 0 };
-  const botBudget = { smoke: 1, flare: 1, molotov: 1 };
-  const active = [];
-  const fires = [];
-  let fireTick = 0;
+  const hitBox = new THREE.Box3();
+  const pouch = { frag: 0, smoke: 1, flare: 1, molotov: 0, glare: 0 };
+  const botPouch = { smoke: 1, flare: 1, molotov: 1 };
+  const flying = [];
+  const burns = [];
+  let burnTick = 0;
 
   function overlaps(x, y, z) {
-    probe.min.set(x - 0.09, y - 0.09, z - 0.09);
-    probe.max.set(x + 0.09, y + 0.09, z + 0.09);
-    for (const c of colliders) if (probe.intersectsBox(c)) return true;
+    hitBox.min.set(x - 0.09, y - 0.09, z - 0.09);
+    hitBox.max.set(x + 0.09, y + 0.09, z + 0.09);
+    for (const c of colliders) if (hitBox.intersectsBox(c)) return true;
     return false;
   }
 
@@ -50,7 +50,7 @@ export function createGrenades(scene, colliders, fx) {
     const vel = dir.clone().normalize().multiplyScalar(THROW_SPEED);
     vel.y += 4.5;
     const fuse = type === 'flare' ? 1.1 : type === 'glare' ? 1.3 : type === 'flash' ? 1.3 : 2.2;
-    active.push({ type, mesh, vel, fuse, bounced: false, thrower });
+    flying.push({ type, mesh, vel, fuse, bounced: false, thrower });
     return true;
   }
 
@@ -77,7 +77,7 @@ export function createGrenades(scene, colliders, fx) {
       fx.fire(pos);
       ctx.sound('explosion');
       ctx.noise(pos, 'explosion', 20);
-      fires.push({ pos, life: FIRE_LIFE, thrower: g.thrower });
+      burns.push({ pos, life: FIRE_LIFE, thrower: g.thrower });
     } else if (g.type === 'glare') {
       fx.glareBurst(pos);
       ctx.sound('glare');
@@ -92,43 +92,43 @@ export function createGrenades(scene, colliders, fx) {
   }
 
   return {
-    inventory,
+    inventory: pouch,
     counts() {
-      return { frag: inventory.frag, smoke: inventory.smoke, flare: inventory.flare, molotov: inventory.molotov, glare: inventory.glare };
+      return { frag: pouch.frag, smoke: pouch.smoke, flare: pouch.flare, molotov: pouch.molotov, glare: pouch.glare };
     },
     reset() {
-      for (const g of active) scene.remove(g.mesh);
-      active.length = 0;
-      fires.length = 0;
-      fireTick = 0;
-      inventory.frag = 0;
-      inventory.smoke = 1;
-      inventory.flare = 1;
-      inventory.molotov = 0;
-      inventory.glare = 0;
-      botBudget.smoke = 1;
-      botBudget.flare = 1;
-      botBudget.molotov = 1;
+      for (const g of flying) scene.remove(g.mesh);
+      flying.length = 0;
+      burns.length = 0;
+      burnTick = 0;
+      pouch.frag = 0;
+      pouch.smoke = 1;
+      pouch.flare = 1;
+      pouch.molotov = 0;
+      pouch.glare = 0;
+      botPouch.smoke = 1;
+      botPouch.flare = 1;
+      botPouch.molotov = 1;
     },
     buy(type) {
-      if (inventory[type] >= 2) return false;
-      inventory[type] += 1;
+      if (pouch[type] >= 2) return false;
+      pouch[type] += 1;
       return true;
     },
     throw(type, origin, dir) {
-      if (inventory[type] <= 0) return false;
-      inventory[type] -= 1;
+      if (pouch[type] <= 0) return false;
+      pouch[type] -= 1;
       return launch(type, origin, dir);
     },
     throwBot(type, origin, dir, thrower = 'Bot') {
       if (type !== 'smoke' && type !== 'molotov' && type !== 'flare') return false;
-      if (botBudget[type] <= 0) return false;
-      botBudget[type] -= 1;
+      if (botPouch[type] <= 0) return false;
+      botPouch[type] -= 1;
       return launch(type, origin, dir, thrower);
     },
     step(dt, ctx) {
-      for (let i = active.length - 1; i >= 0; i -= 1) {
-        const g = active[i];
+      for (let i = flying.length - 1; i >= 0; i -= 1) {
+        const g = flying[i];
         g.fuse -= dt;
         g.vel.y -= GRAVITY * dt;
         const p = g.mesh.position;
@@ -154,15 +154,15 @@ export function createGrenades(scene, colliders, fx) {
         }
         if (g.fuse <= 0) {
           activate(g, ctx);
-          active.splice(i, 1);
+          flying.splice(i, 1);
         }
       }
-      if (fires.length) {
-        fireTick += dt;
-        if (fireTick >= FIRE_TICK) {
-          fireTick = 0;
+      if (burns.length) {
+        burnTick += dt;
+        if (burnTick >= FIRE_TICK) {
+          burnTick = 0;
           const tickDmg = Math.round(FIRE_DPS * FIRE_TICK);
-          for (const f of fires) {
+          for (const f of burns) {
             for (const bot of ctx.bots) {
               if (!bot.alive) continue;
               if (Math.hypot(bot.pos.x - f.pos.x, bot.pos.z - f.pos.z) < FIRE_RADIUS) {
@@ -175,9 +175,9 @@ export function createGrenades(scene, colliders, fx) {
             }
           }
         }
-        for (let i = fires.length - 1; i >= 0; i -= 1) {
-          fires[i].life -= dt;
-          if (fires[i].life <= 0) fires.splice(i, 1);
+        for (let i = burns.length - 1; i >= 0; i -= 1) {
+          burns[i].life -= dt;
+          if (burns[i].life <= 0) burns.splice(i, 1);
         }
       }
     },

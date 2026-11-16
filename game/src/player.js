@@ -2,7 +2,7 @@
 // as a box against the world's colliders one axis at a time. A stride is 2.2 m.
 import * as THREE from 'three';
 
-const RADIUS = 0.34;
+const BODY_RADIUS = 0.34;
 const STAND_HEIGHT = 1.72;
 const CROUCH_HEIGHT = 1.12;
 const STAND_EYE = 1.6;
@@ -29,15 +29,15 @@ export function createPlayer(colliders) {
     armor: 0,
     alive: true,
   };
-  const probe = new THREE.Box3();
-  const wish = new THREE.Vector3();
+  const hitBox = new THREE.Box3();
+  const want = new THREE.Vector3();
   let strideDist = 0;
   let stepped = false;
 
   function overlaps(x, y, z, height, lift) {
-    probe.min.set(x - RADIUS, y + lift, z - RADIUS);
-    probe.max.set(x + RADIUS, y + height - lift, z + RADIUS);
-    for (const collider of colliders) if (probe.intersectsBox(collider)) return collider;
+    hitBox.min.set(x - BODY_RADIUS, y + lift, z - BODY_RADIUS);
+    hitBox.max.set(x + BODY_RADIUS, y + height - lift, z + BODY_RADIUS);
+    for (const collider of colliders) if (hitBox.intersectsBox(collider)) return collider;
     return null;
   }
 
@@ -66,18 +66,18 @@ export function createPlayer(colliders) {
 
     const forward = (keys.has('KeyW') ? 1 : 0) - (keys.has('KeyS') ? 1 : 0);
     const strafe = (keys.has('KeyD') ? 1 : 0) - (keys.has('KeyA') ? 1 : 0);
-    wish.set(0, 0, 0);
+    want.set(0, 0, 0);
     if (forward || strafe) {
       const sin = Math.sin(player.yaw);
       const cos = Math.cos(player.yaw);
-      wish.set(-sin * forward + cos * strafe, 0, -cos * forward - sin * strafe).normalize();
+      want.set(-sin * forward + cos * strafe, 0, -cos * forward - sin * strafe).normalize();
     }
 
     const speed = player.crouching ? CROUCH_SPEED : WALK_SPEED;
     const blend = Math.min(1, (player.onGround ? GROUND_ACCEL : AIR_ACCEL) * dt / speed);
-    player.velocity.x += (wish.x * speed - player.velocity.x) * blend;
-    player.velocity.z += (wish.z * speed - player.velocity.z) * blend;
-    if (player.onGround && !wish.lengthSq()) {
+    player.velocity.x += (want.x * speed - player.velocity.x) * blend;
+    player.velocity.z += (want.z * speed - player.velocity.z) * blend;
+    if (player.onGround && !want.lengthSq()) {
       const damp = Math.max(0, 1 - FRICTION * dt);
       player.velocity.x *= damp;
       player.velocity.z *= damp;

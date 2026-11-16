@@ -49,7 +49,7 @@ export function createWeaponView(camera) {
   const accent = new THREE.MeshStandardMaterial({ color: new THREE.Color(PALETTE.accent), roughness: 0.45, metalness: 0.3 });
   const dark = new THREE.MeshStandardMaterial({ color: new THREE.Color('#1d2a33'), roughness: 0.6, metalness: 0.3 });
 
-  const model = new THREE.Group();
+  const gun = new THREE.Group();
   const receiver = new THREE.Mesh(new THREE.BoxGeometry(0.1, 0.11, 0.46), dark);
   const barrel = new THREE.Mesh(new THREE.BoxGeometry(0.05, 0.05, 0.44), grip);
   barrel.position.set(0, 0.03, -0.42);
@@ -67,10 +67,10 @@ export function createWeaponView(camera) {
   sight.position.set(0, 0.085, -0.08);
   const rail = new THREE.Mesh(new THREE.BoxGeometry(0.04, 0.02, 0.3), body);
   rail.position.set(0, 0.06, -0.28);
-  model.add(receiver, barrel, brake, magazine, foregrip, stock, sight, rail);
-  model.scale.setScalar(1.15);
-  model.position.set(0.28, -0.25, -0.46);
-  camera.add(model);
+  gun.add(receiver, barrel, brake, magazine, foregrip, stock, sight, rail);
+  gun.scale.setScalar(1.15);
+  gun.position.set(0.28, -0.25, -0.46);
+  camera.add(gun);
 
   function starTexture() {
     const c = document.createElement('canvas');
@@ -93,95 +93,109 @@ export function createWeaponView(camera) {
     g.fill();
     return new THREE.CanvasTexture(c);
   }
-  const flash = new THREE.Mesh(
+  const muzzleFlash = new THREE.Mesh(
     new THREE.PlaneGeometry(0.55, 0.55),
     new THREE.MeshBasicMaterial({ map: starTexture(), transparent: true, opacity: 0.95, depthWrite: false, depthTest: false, side: THREE.DoubleSide }),
   );
-  flash.position.set(0.28, -0.22, -1.0);
-  flash.visible = false;
-  camera.add(flash);
-  const flashLight = new THREE.PointLight(new THREE.Color(PALETTE.amber), 0, 6);
-  flashLight.position.set(0.28, -0.2, -0.7);
-  camera.add(flashLight);
+  muzzleFlash.position.set(0.28, -0.22, -1.0);
+  muzzleFlash.visible = false;
+  camera.add(muzzleFlash);
+  const muzzleLight = new THREE.PointLight(new THREE.Color(PALETTE.amber), 0, 6);
+  muzzleLight.position.set(0.28, -0.2, -0.7);
+  camera.add(muzzleLight);
 
-  const state = { id: 'puffin', def: WEAPONS.puffin, mag: WEAPONS.puffin.mag, reserve: WEAPONS.puffin.reserve, cooldown: 0, reloadLeft: 0, flash: 0, kick: 0 };
+  const gunState = { id: 'puffin', def: WEAPONS.puffin, mag: WEAPONS.puffin.mag, reserve: WEAPONS.puffin.reserve, cooldown: 0, reloadLeft: 0, flash: 0, kick: 0, inspectLeft: 0 };
 
   function step(dt) {
-    state.cooldown = Math.max(0, state.cooldown - dt);
-    state.flash = Math.max(0, state.flash - dt);
-    state.kick += (0 - state.kick) * Math.min(1, dt * 14);
-    model.position.z = -0.46 + state.kick;
-    model.rotation.x = state.kick * 2.2;
-    flash.visible = state.flash > 0;
-    flash.rotation.z = state.flash * 30;
-    flashLight.intensity = state.flash > 0 ? 22 : 0;
-    if (state.reloadLeft > 0) {
-      state.reloadLeft = Math.max(0, state.reloadLeft - dt);
-      model.rotation.x = -0.55 * Math.min(1, (state.def.reloadTime - state.reloadLeft) * 2);
-      if (state.reloadLeft === 0) {
-        const need = state.def.mag - state.mag;
-        const take = Math.min(need, state.reserve);
-        state.mag += take;
-        state.reserve -= take;
+    gunState.cooldown = Math.max(0, gunState.cooldown - dt);
+    gunState.flash = Math.max(0, gunState.flash - dt);
+    gunState.kick += (0 - gunState.kick) * Math.min(1, dt * 14);
+    gun.position.z = -0.46 + gunState.kick;
+    gun.rotation.x = gunState.kick * 2.2;
+    muzzleFlash.visible = gunState.flash > 0;
+    muzzleFlash.rotation.z = gunState.flash * 30;
+    muzzleLight.intensity = gunState.flash > 0 ? 22 : 0;
+    if (gunState.reloadLeft > 0) {
+      gunState.reloadLeft = Math.max(0, gunState.reloadLeft - dt);
+      gun.rotation.x = -0.55 * Math.min(1, (gunState.def.reloadTime - gunState.reloadLeft) * 2);
+      if (gunState.reloadLeft === 0) {
+        const need = gunState.def.mag - gunState.mag;
+        const take = Math.min(need, gunState.reserve);
+        gunState.mag += take;
+        gunState.reserve -= take;
       }
+    } else if (gunState.inspectLeft > 0) {
+      gunState.inspectLeft = Math.max(0, gunState.inspectLeft - dt);
+      const p = Math.sin((0.9 - gunState.inspectLeft) / 0.9 * Math.PI);
+      gun.rotation.x = -0.85 * p;
+      gun.rotation.z = 0.45 * p;
+      gun.position.y = -0.25 - 0.04 * p;
+    } else {
+      gun.rotation.z = 0;
+      gun.position.y = -0.25;
     }
   }
 
   return {
-    state,
+    state: gunState,
     step,
     setWeapon(id, keepAmmo = true) {
       const def = WEAPONS[id];
       if (!def) return;
-      const wasSame = state.id === id;
-      const oldMag = state.mag;
-      state.id = id;
-      state.def = def;
+      const wasSame = gunState.id === id;
+      const oldMag = gunState.mag;
+      gunState.id = id;
+      gunState.def = def;
       if (keepAmmo && wasSame) {
-        state.mag = Math.min(def.mag, oldMag);
+        gunState.mag = Math.min(def.mag, oldMag);
       } else {
-        state.mag = def.mag;
-        state.reserve = def.reserve;
+        gunState.mag = def.mag;
+        gunState.reserve = def.reserve;
       }
-      state.cooldown = 0;
-      state.reloadLeft = 0;
-      state.flash = 0;
-      state.kick = 0;
+      gunState.cooldown = 0;
+      gunState.reloadLeft = 0;
+      gunState.flash = 0;
+      gunState.kick = 0;
     },
     setAmmo(mag, reserve) {
-      state.mag = mag;
-      state.reserve = reserve;
+      gunState.mag = mag;
+      gunState.reserve = reserve;
     },
     ready() {
-      return state.mag > 0 && state.cooldown === 0 && state.reloadLeft === 0;
+      return gunState.mag > 0 && gunState.cooldown === 0 && gunState.reloadLeft === 0;
     },
     pullTrigger() {
-      state.cooldown = state.def.gap;
-      state.flash = 0.2;
-      state.kick = state.id === 'albatross' ? 0.12 : state.id === 'cormorant' ? 0.09 : 0.055;
-      flash.visible = true;
-      flashLight.intensity = 22;
+      gunState.cooldown = gunState.def.gap;
+      gunState.flash = 0.2;
+      gunState.kick = gunState.id === 'albatross' ? 0.12 : gunState.id === 'cormorant' ? 0.09 : 0.055;
+      muzzleFlash.visible = true;
+      muzzleLight.intensity = 22;
     },
     takeRound() {
-      if (state.mag <= 0) return false;
-      state.mag -= 1;
+      if (gunState.mag <= 0) return false;
+      gunState.mag -= 1;
       return true;
     },
     reload() {
-      if (state.reloadLeft > 0 || state.mag === state.def.mag || state.reserve === 0) return false;
-      state.reloadLeft = state.def.reloadTime;
+      if (gunState.reloadLeft > 0 || gunState.mag === gunState.def.mag || gunState.reserve === 0) return false;
+      gunState.reloadLeft = gunState.def.reloadTime;
+      return true;
+    },
+    inspect() {
+      if (gunState.reloadLeft > 0 || gunState.cooldown > 0 || gunState.inspectLeft > 0) return false;
+      gunState.inspectLeft = 0.9;
       return true;
     },
     spread(speed) {
-      return state.def.spreadStill + Math.min(1, speed / 5.4) * state.def.spreadMove;
+      return gunState.def.spreadStill + Math.min(1, speed / 5.4) * gunState.def.spreadMove;
     },
     refill() {
-      state.mag = state.def.mag;
-      state.reserve = state.def.reserve;
-      state.cooldown = 0;
-      state.reloadLeft = 0;
-      state.flash = 0;
-      state.kick = 0;
+      gunState.mag = gunState.def.mag;
+      gunState.reserve = gunState.def.reserve;
+      gunState.cooldown = 0;
+      gunState.reloadLeft = 0;
+      gunState.flash = 0;
+      gunState.kick = 0;
     },
   };
 }

@@ -161,7 +161,7 @@ export function createHud() {
       row.textContent = text;
       els.radioLog.prepend(row);
       while (els.radioLog.children.length > 4) els.radioLog.lastChild.remove();
-      setTimeout(() => row.remove(), 9000);
+      setTimeout(() => row.remove(), 15000);
     },
     flash() {
       els.flashOverlay.style.opacity = '0.85';

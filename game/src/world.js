@@ -251,6 +251,28 @@ export function createWorld(scene) {
   plateB.position.set(13, 0.02, -10);
   group.add(plateB);
 
+  const craneMat = new THREE.MeshStandardMaterial({ color: new THREE.Color('#c8452c'), roughness: 0.72 });
+  const craneDark = new THREE.MeshStandardMaterial({ color: new THREE.Color('#3a2c22'), roughness: 0.8 });
+  const crateTeal = new THREE.MeshStandardMaterial({ color: new THREE.Color('#1f6f6b'), roughness: 0.66 });
+  const crateRust = new THREE.MeshStandardMaterial({ color: new THREE.Color('#8a4a28'), roughness: 0.7 });
+  box(1.1, 8.5, 1.1, 17.6, 4.25, 8, craneMat);
+  box(1.7, 0.9, 1.7, 17.6, 8.9, 8, craneDark);
+  const jib = box(7.5, 0.5, 0.6, 14.6, 9.1, 8, craneMat);
+  jib.rotation.z = 0.06;
+  box(2.2, 0.5, 0.6, 19.4, 9.0, 8, craneDark);
+  cylinder(0.03, 0.03, 4.6, 11.4, 6.7, 8, craneDark, 6);
+  box(0.7, 0.5, 0.7, 11.4, 4.2, 8, crateRust);
+  box(0.9, 0.3, 0.9, 11.4, 3.9, 8, craneDark);
+  const hookLine = new THREE.Mesh(new THREE.CylinderGeometry(0.02, 0.02, 2.1, 5), craneDark);
+  hookLine.position.set(11.4, 2.9, 8);
+  group.add(hookLine);
+  box(2.4, 1.1, 1.2, 18.6, 0.55, 2, crateTeal);
+  box(2.4, 1.1, 1.2, 18.6, 1.65, 2, crateRust);
+  box(2.4, 1.1, 1.2, 18.6, 0.55, 6.2, crateRust);
+  box(2.4, 1.1, 1.2, 18.4, 0.55, 12.5, crateTeal);
+  box(1.2, 1.0, 1.2, 18.6, 0.5, 10.5, crateTeal);
+  box(1.2, 1.0, 1.2, -18.6, 0.5, 6.5, crateRust);
+
   function addSign(texture, w, h, x, y, z, ry = 0) {
     const sign = new THREE.Mesh(
       new THREE.PlaneGeometry(w, h),
