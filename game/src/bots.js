@@ -5,8 +5,8 @@ import * as THREE from 'three';
 import { PALETTE } from './palette.js';
 import { WEAPONS } from './weapons.js';
 
-const GULL_NAMES = ['Pip', 'Tern', 'Skua', 'Kitt'];
-const KEEPER_NAMES = ['Flint', 'Brine', 'Kelp', 'Shale', 'Dulse'];
+const GULL_NAMES = ['Pip (IGL)', 'Tern (Rifle)', 'Skua (Support)', 'Kitt (AWP)'];
+const KEEPER_NAMES = ['Flint (IGL)', 'Brine (Rifle)', 'Kelp (Support)', 'Shale (AWP)', 'Dulse (Lurk)'];
 const RADIUS = 0.34;
 const HEIGHT = 1.72;
 const EYE = 1.5;
@@ -217,7 +217,7 @@ export function createBots(scene, world) {
         flareReady: team !== attackTeam && index === 0,
         molotovReady: team !== attackTeam && index === 1,
         stallCalled: false,
-        skill: name === 'Flint' ? 0.7 : name === 'Kitt' ? 0.85 : 1,
+        skill: name === 'Flint (IGL)' ? 0.7 : name === 'Kitt (AWP)' ? 0.85 : 1,
       };
       torso.userData.bot = bot;
       torso.userData.part = 'torso';
@@ -426,7 +426,7 @@ export function createBots(scene, world) {
         if (Math.hypot(bot.pos.x - site.center.x, bot.pos.z - site.center.z) < 2.2) bot.state = 'hold';
         else bot.state = 'push';
       } else {
-        if (bot.flareReady && !bot.target) {
+        if (bot.flareReady && !bot.target && !ctx.noFlare) {
           const site = world.sites[bot.goalSite];
           let nearest = null;
           let nearestD = 12;

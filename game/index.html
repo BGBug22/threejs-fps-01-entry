@@ -12,7 +12,7 @@
     --amber: #ff9a2e;
     --danger: #e5484d;
     --money: #7dc383;
-    --panel: rgba(16, 12, 9, 0.78);
+    --panel: #100c09;
     --line: rgba(242, 232, 213, 0.16);
   }
   * { box-sizing: border-box; margin: 0; padding: 0; }
@@ -211,11 +211,12 @@
   #overlay {
     position: absolute; inset: 0; z-index: 10; display: flex; flex-direction: column;
     align-items: center; justify-content: center; text-align: center;
-    background: radial-gradient(ellipse at center, rgba(23,19,16,.55) 0%, rgba(23,19,16,.88) 100%);
+    background: radial-gradient(ellipse at center, rgba(23,19,16,.92) 0%, rgba(23,19,16,.97) 100%);
   }
   #overlay-title { font-size: 52px; font-weight: 800; letter-spacing: 8px; color: var(--accent); text-shadow: 0 3px 18px rgba(0,0,0,.9); }
   #overlay-copy { max-width: 560px; font-size: 15px; line-height: 1.6; color: var(--ink); margin: 14px 0 26px; }
   #overlay-stats { font-size: 13px; color: var(--muted); margin: -8px 0 22px; }
+  #overlay-board { font-size: 13px; color: #cfc4ae; letter-spacing: .04em; line-height: 1.7; white-space: pre-line; margin: -8px 0 22px; }
   #play {
     font-family: inherit; font-size: 17px; font-weight: 700; letter-spacing: 2px; color: #171310;
     background: var(--accent); border: none; border-radius: 8px; padding: 13px 34px; cursor: pointer;
@@ -323,6 +324,7 @@
     <div id="overlay-title">GULLHAVEN</div>
     <div id="overlay-copy">Round-based tactical FPS on Quay 9 at dusk. Plant the Tide Charge at Lantern Hall or the Cannery, or eliminate the Keeper team. The lighthouse sweeps its beam over the quay. Bots hear gunfire, call it on the radio and play a team plan — and if you stall, a Gull takes the charge and plants it. Throw frag, smoke, flare, Molotov and glare with 4, 5, 6, 7 and 8. First to 5 rounds takes the quay. Sides switch at halftime — then you defend and defuse.</div>
     <div id="overlay-stats" hidden></div>
+    <div id="overlay-board" hidden></div>
     <button id="play" type="button">Click to play</button>
     <button id="settings-btn" type="button">⚙ Settings</button>
     <div id="overlay-keys">

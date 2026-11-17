@@ -21,7 +21,7 @@ shotgun, Osprey AR, Albatross 7 sniper), armour, a defuse kit, and grenades.
 ("PLAN: RUSH A — YOU: ENTRY A"), hear gunfire and explosions and walk over to
 look, and call every contact by lane name. The attack rushes one site together
 from the first second — and if a round is still unplanted at 40 seconds, the
-whole team pushes at once, so every round ends with a winner, never a clock.
+whole team pushes at once, so every round ends with a winner — by elimination, detonation, defuse, or the clock.
 If you stall with the charge, a Gull takes it from you and plants it. The
 defenders answer the rush with a flare that blinds whoever faces it, a
 Molotov that denies the site with fire, and a smoke screen of their own.
@@ -53,6 +53,7 @@ WASD move, mouse aim, left click fire, R reload, E plant/defuse, B buy,
 1–5 weapons, 4–7 grenades, Tab scoreboard, M mute.
 
 **Screenshots.** Four real renders of the game's own code (`?shot=play|buy|
-half|end`): the cover is a live firefight at Lantern Hall — Molotov burning
-at the lighthouse, a flare lighting the lane, smoke down the west gap, and a
-three-shot burst with a star muzzle flash and tracer.
+plant|end`): the cover is a live firefight at Lantern Hall — Molotov burning
+at the site, a Keeper dropping at the crosshair under a star muzzle flash.
+The third is the plant: Pip (IGL) arming the Tide Charge at Site A under
+the ARMING THE CHARGE banner, progress bar at 55%.

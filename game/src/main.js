@@ -99,7 +99,7 @@ let bobY = 0;
 let prevFire = false;
 let prevKeys = new Set();
 let spectateTarget = null;
-const match = { gull: 0, keeper: 0, round: 1, money: START_MONEY, lossStreak: 0, attackTeam: 'gull', kills: 0, deaths: 0, earned: 0, roundKills: 0, totalKills: 0, lastIncome: '', botKills: {}, hasKit: false, roundHistory: [] };
+const match = { gull: 0, keeper: 0, round: 1, money: START_MONEY, lossStreak: 0, attackTeam: 'gull', kills: 0, deaths: 0, earned: 0, roundKills: 0, totalKills: 0, lastIncome: '', botKills: {}, botDeaths: {}, hasKit: false, roundHistory: [] };
 const owned = new Set(['puffin']);
 const ammoStore = {};
 const gunStats = { shots: 0, hits: 0, headshots: 0, damage: 0 };
@@ -199,6 +199,14 @@ function updateScoreboard() {
   document.getElementById('sb-gull-h').textContent = match.attackTeam === 'gull' ? 'GULLS — ATTACK' : 'GULLS — DEFEND';
   document.getElementById('sb-keeper-h').textContent = match.attackTeam === 'keeper' ? 'KEEPERS — ATTACK' : 'KEEPERS — DEFEND';
 }
+function boardText() {
+  const row = (n, k, d) => `${n} ${k}K · ${d}D`;
+  const g = [`You ${match.kills}K · ${match.deaths}D`];
+  for (const b of bots.list) if (b.team === 'gull') g.push(row(b.name, match.botKills[b.name] || 0, match.botDeaths[b.name] || 0));
+  const k = [];
+  for (const b of bots.list) if (b.team === 'keeper') k.push(row(b.name, match.botKills[b.name] || 0, match.botDeaths[b.name] || 0));
+  return `GULLS  ${g.join('  ')}\nKEEPERS  ${k.join('  ')}`;
+}
 
 function damageBot(bot, amount, part, attackerName) {
   if (attackerName === 'You') seenKeeper.set(bot.id, { x: bot.pos.x, z: bot.pos.z, at: time });
@@ -207,6 +215,7 @@ function damageBot(bot, amount, part, attackerName) {
     const weaponName = attackerName === 'You' ? weaponView.state.def.name : '';
     hud.killfeed(attackerName, bot.name, part === 'head', 'gull', weaponName);
     match.totalKills += 1;
+    match.botDeaths[bot.name] = (match.botDeaths[bot.name] || 0) + 1;
     if (attackerName === 'You') {
       match.money += KILL_REWARD;
       match.kills += 1;
@@ -238,7 +247,7 @@ function damageBot(bot, amount, part, attackerName) {
 }
 
 function damagePlayer(amount, fromPos, attackerName) {
-  if (shotMode === 'play' || shotMode === 'half') return;
+  if (shotMode === 'play' || shotMode === 'plant') return;
   if (!player.state.alive || phase !== 'live') return;
   const died = player.damage(amount);
   hud.damageFlash();
@@ -370,15 +379,33 @@ function syncCamera() {
   camera.updateMatrixWorld();
 }
 
-function fireAtBot(bot) {
-  if (!bot) return;
+function aimAt(bot) {
   const eye = new THREE.Vector3(player.state.position.x, player.state.position.y + player.state.eye, player.state.position.z);
-  const target = new THREE.Vector3(bot.pos.x, bot.pos.y + 1.25, bot.pos.z);
-  const d = target.clone().sub(eye);
+  const d = new THREE.Vector3(bot.pos.x, bot.pos.y + 1.25, bot.pos.z).sub(eye);
   const len = d.length() || 1;
   player.state.yaw = Math.atan2(-d.x, -d.z);
   player.state.pitch = Math.asin(Math.max(-1, Math.min(1, d.y / len)));
   syncCamera();
+}
+function coverBot() {
+  const eye = new THREE.Vector3(player.state.position.x, player.state.position.y + player.state.eye, player.state.position.z);
+  let best = null;
+  let bd = 1e9;
+  for (const b of bots.list) {
+    if (b.team !== 'keeper' || !b.alive) continue;
+    const target = new THREE.Vector3(b.pos.x, b.pos.y + 1.25, b.pos.z);
+    const d = target.clone().sub(eye);
+    const dist = d.length();
+    const hit = raycast(eye, d.normalize(), dist);
+    if (!hit || hit.object.userData.bot !== b) continue;
+    const q = Math.hypot(b.pos.x + 13, b.pos.z + 10);
+    if (q < bd) { bd = q; best = b; }
+  }
+  return best || visibleKeeperBot();
+}
+function fireAtBot(bot) {
+  if (!bot) return;
+  aimAt(bot);
   weaponView.state.cooldown = 0;
   tryShoot();
 }
@@ -481,7 +508,7 @@ function endRound(winner, reason) {
         result: match.gull > match.keeper ? 'GULLS WIN THE QUAY' : 'KEEPERS WIN THE QUAY',
         kills: match.kills, deaths: match.deaths, earned: match.earned, mvp,
         accuracy: acc, headshots: gunStats.headshots, damage: gunStats.damage,
-        history: match.roundHistory.join(''),
+        history: match.roundHistory.join(''), board: boardText(),
       });
       input.releaseLock();
     }, 3200);
@@ -519,8 +546,8 @@ function startRound(n) {
   hud.setGrenades(grenades.counts(), match.hasKit);
   hud.setPlan(bots.getPlan(defending ? 'defend' : 'attack'));
   hud.radio(defending
-    ? 'Pip: Halftime — we defend now. Hold Lantern Hall and the Cannery, defuse if they plant.'
-    : 'Pip: Rush A — you entry, we follow.', 'gull');
+    ? 'Pip (IGL): Halftime — we defend now. Hold Lantern Hall and the Cannery, defuse if they plant.'
+    : 'Pip (IGL): Rush A — you entry, we follow.', 'gull');
   hud.setScore(match.gull, match.keeper, match.round);
   hud.setMoney(match.money);
   hud.setAlive(5, 5);
@@ -553,6 +580,7 @@ function startMatch() {
   match.roundHistory = [];
   match.lastIncome = '';
   match.botKills = {};
+  match.botDeaths = {};
   match.hasKit = false;
   gunStats.shots = 0;
   gunStats.hits = 0;
@@ -574,6 +602,7 @@ const ctx = {
   get callout() { return time < calloutUntil ? calloutSite : null; },
   get playerPos() { return player.state.position; },
   get playerAlive() { return player.state.alive; },
+  get noFlare() { return shotMode !== ''; },
   charge: charge.state,
   bots: bots.list,
   rng,
@@ -801,7 +830,7 @@ function fixedStep(dt) {
           if (plantProgress > 0) plantProgress = Math.max(0, plantProgress - dt * 2);
           hud.plantProgress(plantProgress > 0 ? plantProgress : null, 'PLANTING…');
         }
-      } else {
+      } else if (shotMode !== 'plant') {
         plantProgress = 0;
         hud.plantProgress(null);
       }
@@ -923,25 +952,30 @@ function setupShot() {
     match.money = 4050;
     match.lastIncome = 'Round won +$3,250 · 2 kills +$600';
     hud.showBuy(Object.values(WEAPONS), match.money, weaponView.state.id, player.state.armor, match.hasKit, grenadeShop(), match.lastIncome, 5);
-  } else if (shotMode === 'half') {
-    startRound(5);
+  } else if (shotMode === 'plant') {
+    startRound(1);
     hud.hideBuy();
     hud.hideOverlay();
     phase = 'live';
     roundTimer = ROUND_TIME;
+    const planter = bots.list.find((b) => b.team === 'gull');
+    planter.pos.set(-12, 0, -9);
+    planter.group.position.set(-12, 0, -9);
+    planter.yaw = 0;
+    planter.group.rotation.y = 0;
+    planter.state = 'plant';
+    planter.plantProgress = 0.55;
+    charge.drop(new THREE.Vector3(-11.4, 0, -9.8));
+    hud.plantProgress(0.55, 'PLANTING THE CHARGE — SITE A');
+    hud.banner('ARMING THE CHARGE', 'Pip (IGL) is planting the Tide Charge at Lantern Hall — cover him!', 60000);
+    player.reset(new THREE.Vector3(-6, 0, -2), 0.5);
     scene.updateMatrixWorld(true);
-    for (let i = 0; i < 180; i += 1) {
-      fixedStep(STEP);
-      scene.updateMatrixWorld(true);
-      if (phase !== 'live') break;
-    }
-    hud.banner('HALFTIME — SIDES SWITCHED', 'You defend now — hold the sites and defuse the charge', 60000);
   } else if (shotMode === 'play') {
     match.money = 800;
     owned.add('osprey');
     switchWeapon('osprey');
     player.state.armor = 50;
-    player.reset(new THREE.Vector3(-15, 0, 0), 0.0);
+    player.reset(new THREE.Vector3(-6, 0, -2), 0.5);
     phase = 'live';
     roundTimer = ROUND_TIME;
     bots.spawnRound(1, seedBase + 108);
@@ -954,32 +988,23 @@ function setupShot() {
     hud.hideOverlay();
     hud.hideBuy();
     updateScoreboard();
-    hud.radio('Pip: Smoking Lantern Hall — push through it', 'gull');
+    hud.radio('Pip (IGL): Smoking Lantern Hall — push through it', 'gull');
     scene.updateMatrixWorld(true);
     let coverTarget = null;
     let burstLeft = 0;
     let burstDone = false;
     for (let i = 0; i < 300; i += 1) {
-      if (i === 90) {
-        player.state.yaw = -0.2;
-        camera.rotation.y = -0.2;
-        throwPlayerGrenade('molotov');
-        hud.radio('You: Molotov out — Lantern Hall is burning', 'gull');
-      }
-      if (i === 120) {
-        player.state.yaw = -0.2;
-        camera.rotation.y = -0.2;
+      if (i === 30) {
+        player.state.yaw = 0.7;
+        camera.rotation.y = 0.7;
         throwPlayerGrenade('flare');
         hud.radio('You: Flare out — they are blind!', 'gull');
       }
-      if (i === 140) {
-        player.state.yaw = 0.2;
-        camera.rotation.y = 0.2;
-        throwPlayerGrenade('smoke');
-      }
-      if (i === 230) {
-        player.state.yaw = 0.0;
-        camera.rotation.y = 0.0;
+      if (i === 90) {
+        player.state.yaw = 0.8;
+        camera.rotation.y = 0.8;
+        throwPlayerGrenade('molotov');
+        hud.radio('You: Molotov out — Lantern Hall is burning', 'gull');
       }
       if (!burstDone && burstLeft === 0 && i >= 140 && i % 5 === 0) {
         const vis = visibleKeeperBot();
@@ -1003,10 +1028,11 @@ function setupShot() {
     match.kills = 12;
     match.deaths = 4;
     match.earned = 14200;
-    match.botKills = { Pip: 9, Tern: 7 };
+    match.botKills = { 'Pip (IGL)': 9, 'Tern (Rifle)': 7, 'Flint (IGL)': 4, 'Brine (Rifle)': 3, 'Kelp (Support)': 2, 'Shale (AWP)': 1 };
+    match.botDeaths = { 'Pip (IGL)': 2, 'Tern (Rifle)': 1, 'Skua (Support)': 0, 'Kitt (AWP)': 3, 'Flint (IGL)': 8, 'Brine (Rifle)': 6, 'Kelp (Support)': 5, 'Shale (AWP)': 5, 'Dulse (Lurk)': 4 };
     hud.setScore(5, 3, 9);
     bots.spawnRound(9, seedBase + 916, 'keeper');
-    hud.showOverlay('end', '5 - 3', { result: 'GULLS WIN THE QUAY', kills: 12, deaths: 4, earned: 14200, mvp: 'You', accuracy: 41, headshots: 3, damage: 1480, history: 'GGKGKGKG' });
+    hud.showOverlay('end', '5 - 3', { result: 'GULLS WIN THE QUAY', kills: 12, deaths: 4, earned: 14200, mvp: 'You', accuracy: 41, headshots: 3, damage: 1480, history: 'GGKGKGKG', board: boardText() });
     player.reset(new THREE.Vector3(-8, 0, -2), 0.5);
     phase = 'menu';
   }
@@ -1015,9 +1041,22 @@ function setupShot() {
     requestAnimationFrame(() => {
       if (finalShotPending) {
         finalShotPending = false;
+        const foe = coverBot();
+        if (foe) {
+          const eye = new THREE.Vector3(player.state.position.x, player.state.position.y + player.state.eye, player.state.position.z);
+          const dx = foe.pos.x - eye.x;
+          const dz = foe.pos.z - eye.z;
+          const dl = Math.hypot(dx, dz) || 1;
+          foe.pos.set(eye.x + (dx / dl) * 8, 0, eye.z + (dz / dl) * 8);
+          foe.group.position.copy(foe.pos);
+          foe.yaw = Math.atan2(dx, dz);
+          foe.group.rotation.y = foe.yaw;
+          foe.health = 20;
+          aimAt(foe);
+        }
         weaponView.state.cooldown = 0;
         tryShoot();
-        weaponView.state.flash = 5;
+        weaponView.state.flash = 0.5;
       }
       render();
       window.__shotReady = true;

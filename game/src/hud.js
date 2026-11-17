@@ -8,6 +8,7 @@ export function createHud() {
     title: $('overlay-title'),
     copy: $('overlay-copy'),
     stats: $('overlay-stats'),
+    board: $('overlay-board'),
     play: $('play'),
     settingsBtn: $('settings-btn'),
     settingsPanel: $('settings-panel'),
@@ -223,7 +224,7 @@ export function createHud() {
       const v = document.createElement('span');
       v.className = victim === 'You' ? 'feed-gull' : 'feed-keeper';
       v.textContent = victim;
-      row.append(k, document.createTextNode(headshot ? ' ☠ ' : ' ✕ '), v);
+      row.append(k, document.createTextNode(headshot ? ' ☠ HEAD ' : ' ✕ '), v);
       if (weapon) {
         const w = document.createElement('span');
         w.className = 'feed-weapon';
@@ -339,8 +340,11 @@ export function createHud() {
         const hist = stats.history ? ` · Rounds: ${stats.history.split('').join(' ')}` : '';
         els.stats.textContent = `You: ${stats.kills} kills · ${stats.deaths} deaths · $${stats.earned.toLocaleString()} earned — MVP: ${stats.mvp} · ${acc}% accuracy · ${hs} headshots · ${dmg.toLocaleString()} damage${hist}`;
         show(els.stats);
+        els.board.textContent = stats.board || '';
+        show(els.board);
       } else {
         hide(els.stats);
+        hide(els.board);
       }
       els.play.textContent = text.action;
       show(els.overlay);
